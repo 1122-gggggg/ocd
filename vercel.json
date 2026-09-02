@@ -1,0 +1,11 @@
+{
+  "framework": "nextjs",
+  "regions": ["hnd1"],
+  "buildCommand": "npx prisma generate && npx prisma migrate deploy && npm run build",
+  "installCommand": "npm ci",
+  "functions": {
+    "src/app/api/auth/[...nextauth]/route.ts": {
+      "maxDuration": 10
+    }
+  }
+}
