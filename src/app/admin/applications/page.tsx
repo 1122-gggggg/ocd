@@ -4,7 +4,8 @@ import { reviewBoardApplication } from "@/app/actions/boards";
 export default async function AdminApplicationsPage() {
   const apps = await prisma.boardApplication.findMany({
     orderBy: { createdAt: "desc" },
-    include: { proposer: true },
+    take: 50,
+    select: { id: true, name: true, slug: true, group: true, description: true, rationale: true, status: true, reviewNote: true, createdAt: true, proposer: { select: { nickname: true } } },
   });
   const pending = apps.filter((a) => a.status === "PENDING");
   const others = apps.filter((a) => a.status !== "PENDING");

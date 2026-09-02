@@ -1,18 +1,8 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db";
+import { getCachedHomeBoards } from "@/lib/cache";
 
 export default async function HomePage() {
-  const boards = await prisma.board.findMany({
-    where: { status: "ACTIVE" },
-    orderBy: { slug: "asc" },
-    include: {
-      posts: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { createdAt: true },
-      },
-    },
-  });
+  const boards = await getCachedHomeBoards();
 
   const groupLabels: Record<string, string> = {
     SYMPTOM: "症狀",

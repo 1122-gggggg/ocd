@@ -4,7 +4,8 @@ import { moderateContent, resolveReport } from "@/app/actions/reports";
 export default async function AdminReportsPage() {
   const reports = await prisma.report.findMany({
     orderBy: { createdAt: "desc" },
-    include: { reporter: true },
+    take: 50,
+    select: { id: true, targetType: true, targetId: true, reason: true, status: true, createdAt: true, reporter: { select: { nickname: true } } },
   });
 
   return (

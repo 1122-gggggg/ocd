@@ -5,7 +5,8 @@ import Link from "next/link";
 export default async function AdminCliniciansPage() {
   const apps = await prisma.clinicianApplication.findMany({
     orderBy: { createdAt: "desc" },
-    include: { user: true },
+    take: 50,
+    select: { id: true, userId: true, title: true, specialty: true, proofPath: true, statement: true, status: true, reviewNote: true, createdAt: true, user: { select: { nickname: true, email: true } } },
   });
   const pending = apps.filter((a) => a.status === "PENDING");
   const others = apps.filter((a) => a.status !== "PENDING");

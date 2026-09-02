@@ -1,11 +1,9 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { readFile } from "fs/promises";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
-
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
@@ -17,8 +15,6 @@ export async function GET(
   const { userId } = await params;
   const app = await prisma.clinicianApplication.findUnique({ where: { userId } });
   if (!app?.proofPath) return new NextResponse("Not Found", { status: 404 });
-
-  // R2 path: r2://bucket/key
   if (app.proofPath.startsWith("r2://")) {
     if (!r2) return new NextResponse("Not Found", { status: 404 });
     const key = app.proofPath.replace(`r2://${R2_BUCKET}/`, "");
@@ -41,22 +37,5 @@ export async function GET(
     }
   }
 
-  const baseDir = path.resolve("uploads/clinician-proof");
-  const resolved = path.resolve(app.proofPath);
-  if (!resolved.startsWith(baseDir)) {
-    return new NextResponse("Not Found", { status: 404 });
-  }
-  try {
-    const data = await readFile(resolved);
-    const ext = path.extname(resolved).toLowerCase();
-    let contentType = "application/octet-stream";
-    if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
-    else if (ext === ".png") contentType = "image/png";
-    else if (ext === ".pdf") contentType = "application/pdf";
-    return new NextResponse(data, {
-      headers: { "Content-Type": contentType },
-    });
-  } catch {
-    return new NextResponse("Not Found", { status: 404 });
-  }
+  return new NextResponse("migrated to R2", { status: 404 });
 }

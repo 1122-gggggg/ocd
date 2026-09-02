@@ -4,11 +4,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { r2, R2_BUCKET, r2Enabled } from "@/lib/r2";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-
 export async function createClinicianApplication(formData: FormData) {
   const session = (await auth()) as unknown as { user?: { id: string; memberType: string } } | null;
   if (!session?.user?.id) return { ok: false, code: "UNAUTHORIZED" };
@@ -28,6 +25,7 @@ export async function createClinicianApplication(formData: FormData) {
   let proofPath: string | null = null;
   const file = formData.get("proof") as unknown as File | null;
   if (file && typeof file === "object" && "arrayBuffer" in file && file.size > 0) {
+    if (!r2Enabled) return { ok: false, code: "STORAGE_NOT_CONFIGURED" };
     const allowed = ["image/jpeg", "image/png", "application/pdf"];
     if (!allowed.includes(file.type)) {
       return { ok: false, code: "INVALID_FILE_TYPE", message: "僅接受 jpeg/png/pdf" };
@@ -43,23 +41,15 @@ export async function createClinicianApplication(formData: FormData) {
     const ext = extMap[file.type] ?? "bin";
     const key = `${dbUser.id}-${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    if (r2Enabled && r2) {
-      await r2.send(
-        new PutObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: key,
-          Body: buffer,
-          ContentType: file.type,
-        })
-      );
-      proofPath = `r2://${R2_BUCKET}/${key}`;
-    } else {
-      const dir = path.resolve("uploads/clinician-proof");
-      await mkdir(dir, { recursive: true });
-      const fullPath = path.join(dir, key);
-      await writeFile(fullPath, buffer);
-      proofPath = fullPath;
-    }
+    await r2!.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: key,
+        Body: buffer,
+        ContentType: file.type,
+      })
+    );
+    proofPath = `r2://${R2_BUCKET}/${key}`;
   }
 
   const existing = await prisma.clinicianApplication.findUnique({ where: { userId: dbUser.id } });

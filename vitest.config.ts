@@ -1,3 +1,4 @@
+// Requires Node20+ (util.styleText)
 import { defineConfig } from "vitest/config";
 import path from "path";
 

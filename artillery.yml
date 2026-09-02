@@ -1,0 +1,102 @@
+# Artillery load test — OCD forum
+# Equivalent to k6/load.js: 10 → 100 → 300 VU phases (60s each)
+#
+# NOTE on 500 simultaneous writes:
+#   DATABASE_URL uses `pgbouncer=true&connection_limit=10` (Neon pooled). All
+#   server-side writes (createPost/createReply via POST /b/[slug]) queue at the
+#   pool. 500 concurrent writes will serialize through 10 connections — p95 will
+#   climb, not throughput. This script tests 100 VU steady (expected peak) + 300
+#   VU burst to observe that queueing.
+#
+# Usage:
+#   BASE_URL=https://ocd-90608star-2630.vercel.app npx artillery run artillery.yml
+#   npm run load:artillery
+#   # Override target explicitly:
+#   # artillery run --target https://ocd-90608star-2630.vercel.app artillery.yml
+#
+# BASE_URL env default: https://ocd-90608star-2630.vercel.app
+# If BASE_URL is set in the environment, Artillery picks it via $env.BASE_URL.
+
+config:
+  # BASE_URL env override — falls back to prod default
+  target: "{{ $env.BASE_URL || 'https://ocd-90608star-2630.vercel.app' }}"
+  # Fallback if $env interpolation not supported in your Artillery version:
+  # target: "https://ocd-90608star-2630.vercel.app"
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: "Warm up: 10 VU"
+    - duration: 60
+      arrivalRate: 100
+      name: "Steady: 100 VU — expected prod peak"
+    - duration: 60
+      arrivalRate: 300
+      name: "Burst: 300 VU — queue at connection_limit=10"
+  # Keep-alive, timeouts
+  http:
+    timeout: 10
+  ensure:
+    # p95 < 500ms, error rate < 1% (mirrors k6 thresholds)
+    p95: 500
+    maxErrorRate: 1
+  plugins:
+    ensure: {}
+  # Load a small CSV/JSON if you want deterministic slugs — inline list below.
+
+before:
+  # Optional: capture BASE_URL from env for logging
+  flow:
+    - log: "Target: {{ $env.BASE_URL || 'https://ocd-90608star-2630.vercel.app' }}"
+
+scenarios:
+  - name: "Browse + auth write + post read"
+    weight: 100
+    flow:
+      # GET /
+      - get:
+          url: "/"
+          expect:
+            - statusCode: 200
+      - think: 1
+
+      # GET /b/[slug] — random slug via loop not needed; pick one representative
+      # Artillery will hit the same slug per VU; vary with $randomString if desired.
+      - get:
+          url: "/b/contamination"
+      - get:
+          url: "/b/checking"
+      - get:
+          url: "/b/erp"
+      - think: 1
+
+      # POST /b/[slug] (auth flow) — form POST without session should 401/302/404
+      # Tests middleware rate-limit (60 req/60s per IP) + PgBouncer queue depth.
+      - post:
+          url: "/b/contamination"
+          formData:
+            title: "artillery synthetic {{ $randomString() }}"
+            bodyMd: "artillery synthetic post — ignore"
+            isAnonymous: "0"
+          expect:
+            - statusCode: [200, 302, 303, 307, 308, 401, 403, 404, 422]
+      - think: 1
+
+      # POST /api/auth/callback/credentials — exercises auth flow throughput
+      - post:
+          url: "/api/auth/callback/credentials"
+          formData:
+            csrfToken: "artillery"
+            email: "artillery@example.com"
+            password: "invalid"
+          expect:
+            - statusCode: [200, 302, 401, 403, 404]
+
+      # GET /b/[slug]/p/[id] — synthetic ID, 404 expected, still hits DB/index
+      - get:
+          url: "/b/contamination/p/cload-artillery-{{ $randomString() }}"
+          expect:
+            - statusCode: [200, 404]
+      - get:
+          url: "/b/erp/p/cload-artillery-{{ $randomString() }}"
+          expect:
+            - statusCode: [200, 404]

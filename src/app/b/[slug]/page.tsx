@@ -6,8 +6,33 @@ import { publicAuthorLabel } from "@/lib/display";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-export default async function BoardPage({ params }: { params: Promise<{ slug: string }> }) {
+const BOARD_PAGE_SIZE = 20;
+
+const authorSelect = {
+  id: true,
+  nickname: true,
+  memberType: true,
+  clinicianStatus: true,
+} as const;
+
+function parsePage(value: string | string[] | undefined): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const n = parseInt(raw ?? "1", 10);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return n;
+}
+
+export default async function BoardPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { slug } = await params;
+  const sp = await searchParams;
+  const requestedPage = parsePage(sp?.page);
+
   const board = await prisma.board.findUnique({ where: { slug } });
   if (!board || board.status !== "ACTIVE") notFound();
 
@@ -15,15 +40,29 @@ export default async function BoardPage({ params }: { params: Promise<{ slug: st
     user?: { id: string; role: string; clinicianStatus: string; nickname?: string };
   } | null;
 
-  const viewer = session?.user as any;
+  const viewer = session?.user ?? null;
 
-  const canPost = canCreatePost(viewer ?? null, board as any);
+  const canPost = canCreatePost(viewer, { status: board.status, slug: board.slug });
+
+  const total = await prisma.post.count({
+    where: { boardId: board.id, deletedAt: null },
+  });
+  const totalPages = Math.max(1, Math.ceil(total / BOARD_PAGE_SIZE));
+  const currentPage = Math.min(requestedPage, totalPages);
 
   const posts = await prisma.post.findMany({
     where: { boardId: board.id, deletedAt: null },
     orderBy: { createdAt: "desc" },
-    include: { author: true },
-    take: 50,
+    skip: (currentPage - 1) * BOARD_PAGE_SIZE,
+    take: BOARD_PAGE_SIZE,
+    select: {
+      id: true,
+      title: true,
+      createdAt: true,
+      isAnonymous: true,
+      authorId: true,
+      author: { select: authorSelect },
+    },
   });
 
   return (
@@ -59,8 +98,8 @@ export default async function BoardPage({ params }: { params: Promise<{ slug: st
         <div className="space-y-3">
           {posts.map((p) => {
             const { label, badge } = publicAuthorLabel(
-              { isAnonymous: p.isAnonymous, author: p.author as any, authorId: p.authorId },
-              viewer ?? null
+              { isAnonymous: p.isAnonymous, author: p.author, authorId: p.authorId },
+              viewer
             );
             return (
               <Link
@@ -77,6 +116,34 @@ export default async function BoardPage({ params }: { params: Promise<{ slug: st
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 text-sm">
+          {currentPage > 1 ? (
+            <Link
+              href={`/b/${slug}?page=${currentPage - 1}`}
+              className="px-3 py-1 rounded border bg-white hover:bg-gray-50"
+            >
+              上一頁
+            </Link>
+          ) : (
+            <span className="px-3 py-1 rounded border bg-gray-100 text-gray-400 cursor-not-allowed">上一頁</span>
+          )}
+          <span className="text-gray-600">
+            第 {currentPage} 頁 / 共 {totalPages} 頁（{total} 篇）
+          </span>
+          {currentPage < totalPages ? (
+            <Link
+              href={`/b/${slug}?page=${currentPage + 1}`}
+              className="px-3 py-1 rounded border bg-white hover:bg-gray-50"
+            >
+              下一頁
+            </Link>
+          ) : (
+            <span className="px-3 py-1 rounded border bg-gray-100 text-gray-400 cursor-not-allowed">下一頁</span>
+          )}
         </div>
       )}
     </div>

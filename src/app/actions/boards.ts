@@ -1,8 +1,6 @@
-"use server";
-
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
 function normalizeSlug(s: string): string | null {
@@ -57,28 +55,30 @@ export async function reviewBoardApplication(formData: FormData) {
   if (!["APPROVED", "REJECTED"].includes(status)) return { ok: false, code: "INVALID_STATUS" };
   const app = await prisma.boardApplication.findUnique({ where: { id } });
   if (!app) return { ok: false, code: "NOT_FOUND" };
-
-  await prisma.boardApplication.update({
-    where: { id },
-    data: { status: status as any, reviewNote },
-  });
-
-  if (status === "APPROVED") {
-    // Create board with disclaimer
-    const disclaimer = "本站內容由使用者撰寫或管理員整理，僅供經驗交流，不是醫療診斷、處方或治療建議。請勿依據本站內容自行停藥或改變治療。緊急狀況請撥打 1925 或當地緊急醫療。";
-    await prisma.board.create({
-      data: {
-        slug: app.slug,
-        name: app.name,
-        description: app.description,
-        group: app.group,
-        officialMd: disclaimer,
-        status: "ACTIVE",
-      },
+  await prisma.$transaction(async (tx) => {
+    await tx.boardApplication.update({
+      where: { id },
+      data: { status: status as any, reviewNote },
     });
-  }
+    if (status === "APPROVED") {
+      const disclaimer =
+        "本站內容由使用者撰寫或管理員整理，僅供經驗交流，不是醫療診斷、處方或治療建議。請勿依據本站內容自行停藥或改變治療。緊急狀況請撥打 1925 或當地緊急醫療。";
+      await tx.board.create({
+        data: {
+          slug: app.slug,
+          name: app.name,
+          description: app.description,
+          group: app.group,
+          officialMd: disclaimer,
+          status: "ACTIVE",
+        },
+      });
+    }
+  });
   revalidatePath("/admin/applications");
   revalidatePath("/");
+  revalidateTag("boards-nav");
+  revalidateTag("boards-home");
   redirect("/admin/applications");
 }
 

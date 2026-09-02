@@ -3,7 +3,7 @@ import { Noto_Sans_TC } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
-import { prisma } from "@/lib/db";
+import { getCachedBoards } from "@/lib/cache";
 
 const notoSansTC = Noto_Sans_TC({
   subsets: ["latin"],
@@ -21,11 +21,7 @@ async function Header() {
     user?: { id: string; nickname?: string; role?: string; memberType?: string };
   } | null;
 
-  const boards = await prisma.board.findMany({
-    where: { status: "ACTIVE" },
-    orderBy: { slug: "asc" },
-    select: { slug: true, name: true, group: true },
-  });
+  const boards = await getCachedBoards();
   const symptom = boards.filter((b) => b.group === "SYMPTOM");
   const treatment = boards.filter((b) => b.group === "TREATMENT");
   const community = boards.filter((b) => b.group === "COMMUNITY");

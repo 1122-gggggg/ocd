@@ -2,12 +2,15 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-
 export async function createReport(formData: FormData) {
   const session = await auth() as unknown as { user?: { id: string } } | null;
   if (!session?.user?.id) return { ok: false, code: "UNAUTHORIZED" };
+  if (!checkRateLimit(`createReport:${session.user.id}`, 5, 60_000)) {
+    return { ok: false, code: "RATE_LIMITED", message: "舉報過於頻繁，請稍後再試" };
+  }
   const targetType = String(formData.get("targetType") ?? "") as "POST" | "REPLY";
   const targetId = String(formData.get("targetId") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();

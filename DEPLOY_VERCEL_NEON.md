@@ -9,8 +9,8 @@
 3. 建好後 → `Dashboard → Connection Details`
    - 選 `Pooled` 取得 `DATABASE_URL` (含 `?sslmode=require&channel_binding=require`，Neon 會給 `...-pooler...`)
      `postgresql://user:pass@ep-xxx-pooler.ap-northeast-1.aws.neon.tech/neondb?sslmode=require`
-     自行加上 `&pgbouncer=true&connection_limit=5` 尾綴 (Prisma 建議)
-     例: `postgresql://.../neondb?sslmode=require&channel_binding=require&pgbouncer=true&connection_limit=5`
+     自行加上 `&pgbouncer=true&connection_limit=10` 尾綴 (Prisma 建議)
+     例: `postgresql://.../neondb?sslmode=require&channel_binding=require&pgbouncer=true&connection_limit=10`
    - 選 `Direct` 取得 `DIRECT_URL` (不含 pooler)
      `postgresql://user:pass@ep-xxx.ap-northeast-1.aws.neon.tech/neondb?sslmode=require`
    - 兩條都要，500人 Free 的 10GB / 190CU 夠用，自動休眠省 CU
@@ -35,15 +35,19 @@ git push -u origin main
    - Region 已鎖 `hnd1`
 3. **Environment Variables** (全部 `Production` + `Preview` 都加):
    ```
-   DATABASE_URL=  postgresql://...-pooler...?sslmode=require&pgbouncer=true&connection_limit=5
+   DATABASE_URL=  postgresql://...-pooler...?sslmode=require&pgbouncer=true&connection_limit=10
    DIRECT_URL=    postgresql://...direct...?sslmode=require
    AUTH_SECRET=   openssl rand -base64 32  (本地: dev-insecure-... 改掉)
    AUTH_URL=      https://ocd.yourdomain.tw
    AUTH_GOOGLE_ID=       (若用 Google 登入，否則留空)
    AUTH_GOOGLE_SECRET=
    SEED_ADMIN_PASSWORD=  <強密碼，首次 seed 用>
+   R2_ACCOUNT_ID=        <Cloudflare R2 account ID>
+   R2_ACCESS_KEY_ID=     <R2 API access key>
+   R2_SECRET_ACCESS_KEY= <R2 API secret key>
+   R2_BUCKET=            ocd-proofs
    ```
-   **重要**: `DATABASE_URL` 必須是 pooled，`DIRECT_URL` 必須是 direct，否則 `migrate deploy` 會報 `prepared statement` 錯誤。
+   **重要**: `DATABASE_URL` 必須是 pooled (`-pooler` + `pgbouncer=true&connection_limit=10`)，`DIRECT_URL` 必須是 direct (不含 `pgbouncer=true`)，否則 `migrate deploy` 會報 `prepared statement` 錯誤。`AUTH_SECRET` 用 `openssl rand -base64 32` 產生，至少 32 字元。
 
 4. `Deploy` → 觀察 log 應見 `1 migration found ... No pending migrations` + `Seed completed` + `✓ Compiled`
 
@@ -72,13 +76,9 @@ curl -s -D - https://ocd.yourdomain.tw/b/newcomers/new | grep -q "location: /log
 
 ## 6. 維運
 
-- **備份**: Neon Dashboard → `Branches` 自動每日備份，Free 7天 PITR；重要資料另 `pg_dump` 到 R2
+- **備份**: Neon Dashboard → `Branches` 自動每日備份，Free 7天 PITR；重要資料另 `pg_dump` 到 R2 — 見 `scripts/backup/README.md` 與 `scripts/backup/neon-to-r2.sh`（`DIRECT_URL` 直連 + `pg_dump --no-owner | gzip | aws s3 cp --endpoint-url https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com s3://$R2_BUCKET/backups/neon-$(date +%Y%m%d).sql.gz`），Vercel `vercel.json` 已設 `crons: [{path:"/api/cron/backup", schedule:"0 3 * * *"}]` 每日 03:00 觸發
 - **升級**: Vercel Hobby 100GB 頻寬足 500人，爆了再 `Vercel Pro $20`，Neon 自動 scale 不需手動
-- **上傳**: 目前 `uploads/clinician-proof` 仍寫本地，**多實例會丟檔**。500人先用，流量起來後切 `R2`:
-  ```ts
-  // prisma/seed.ts 後續改 proofPath 存 R2 URL，route.ts 改 fetch R2
-  // 環境變數加 R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET
-  ```
+- **上傳**: 已切 `R2` (`src/lib/r2.ts` + `R2_*` 環境變數)。`uploads/clinician-proof` 不再寫本地磁碟 (Vercel 無持久磁碟)，改由 `S3Client` 上傳至 `R2_BUCKET` (預設 `ocd-proofs`)，`proofPath` 存 R2 URL/key。
 - **日誌**: Vercel → Logs, Neon → Monitoring
 - **本地仍可用**: `echo "ab19696a" | sudo -S docker compose up --build -d` 仍在 `http://localhost:3001` (5433/3001 映射，因 5432/3000 本機被佔)
 
@@ -101,6 +101,6 @@ npx vitest run           # 16 tests
 | `Can't reach database ... pooler` | `DATABASE_URL` 少 `?pgbouncer=true` 或用 direct 應改 pooled |
 | `prepared statement ... does not exist` | `migrate deploy` 用了 pooled，改用 `DIRECT_URL` |
 | `JWTSessionError edge` | 已修 `src/auth.ts` 的 `isEdge`  guard，確保 `vercel.json` 為 `hnd1` |
-| `uploads` 404 | Vercel 無持久磁碟，必須切 R2 |
+| `uploads` 404 | Vercel 無持久磁碟，必須切 R2 — 確認 `R2_*` 已設且 `r2Enabled` 為 true |
 
 有問題貼 `Vercel Deploy Logs` 前 50 行即可定位。

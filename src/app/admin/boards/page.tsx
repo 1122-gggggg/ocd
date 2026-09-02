@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { updateOfficialMd } from "@/app/actions/boards";
 
 export default async function AdminBoardsPage() {
-  const boards = await prisma.board.findMany({ orderBy: { slug: "asc" } });
+  const boards = await prisma.board.findMany({ orderBy: { createdAt: "desc" }, take: 50, select: { slug: true, name: true, group: true, officialMd: true } });
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold">編輯官方說明</h1>

@@ -56,26 +56,26 @@ enum ReportStatus {
 }
 
 model User {
-  id               String              @id @default(cuid())
-  name             String?
-  email            String?             @unique
-  emailVerified    DateTime?
-  image            String?
-  passwordHash     String?
-  nickname         String              @unique
-  profileComplete  Boolean             @default(false)
-  role             UserRole            @default(USER)
-  memberType       MemberType          @default(PATIENT)
-  clinicianStatus  ClinicianStatus     @default(NONE)
-  accounts         Account[]
-  sessions         Session[]
-  posts            Post[]
-  replies          Reply[]
-  boardApplications BoardApplication[]
+  id                   String                @id @default(cuid())
+  name                 String?
+  email                String?               @unique
+  emailVerified        DateTime?
+  image                String?
+  passwordHash         String?
+  nickname             String                @unique
+  profileComplete      Boolean               @default(false)
+  role                 UserRole              @default(USER)
+  memberType           MemberType            @default(PATIENT)
+  clinicianStatus      ClinicianStatus       @default(NONE)
+  accounts             Account[]
+  sessions             Session[]
+  posts                Post[]
+  replies              Reply[]
+  boardApplications    BoardApplication[]
   clinicianApplication ClinicianApplication?
-  reports          Report[]
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  reports              Report[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 }
 
 model Account {
@@ -136,6 +136,8 @@ model BoardApplication {
   status      ApplicationStatus @default(PENDING)
   reviewNote  String?           @db.Text
   createdAt   DateTime          @default(now())
+
+  @@index([status])
 }
 
 model ClinicianApplication {
@@ -150,6 +152,8 @@ model ClinicianApplication {
   reviewNote String?           @db.Text
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
+
+  @@index([status])
 }
 
 model Post {
@@ -166,6 +170,10 @@ model Post {
   deletedAt   DateTime?
   deletedById String?
   replies     Reply[]
+
+  @@index([boardId, deletedAt, createdAt])
+  @@index([boardId, createdAt])
+  @@index([authorId])
 }
 
 model Reply {
@@ -184,6 +192,8 @@ model Reply {
   deletedById  String?
 
   @@unique([postId, floor])
+  @@index([postId, createdAt])
+  @@index([authorId])
 }
 
 model Report {
@@ -198,4 +208,5 @@ model Report {
   resolvedAt DateTime?
 
   @@unique([reporterId, targetType, targetId])
+  @@index([status, createdAt])
 }

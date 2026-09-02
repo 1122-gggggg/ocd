@@ -3,7 +3,7 @@ import { authConfig } from "./auth.config";
 import { NextResponse } from "next/server";
 import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
 import { preferRequestHost } from "./lib/prefer-request-host";
-
+import { checkRateLimit, getClientIp } from "./lib/rate-limit";
 const { auth } = NextAuth(authConfig);
 
 const withSession = auth((req) => {
@@ -46,6 +46,17 @@ const withSession = auth((req) => {
 });
 
 export default function middleware(req: NextRequest, event: NextFetchEvent) {
+  // Optional middleware rate limit for POST routes (per-IP, per-instance best-effort)
+  // 60 req / 60s window. Returns 429 before session/auth logic to shed load early.
+  if (req.method === "POST") {
+    const ip = getClientIp(req.headers);
+    if (!checkRateLimit(`mw:POST:${ip}`, 60, 60_000)) {
+      return new NextResponse("Too Many Requests", {
+        status: 429,
+        headers: { "Retry-After": "60" },
+      });
+    }
+  }
   // Clear stale AUTH_URL before Auth.js rewrites the request origin.
   preferRequestHost();
   return (withSession as unknown as NextMiddleware)(req, event);

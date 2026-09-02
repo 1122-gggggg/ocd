@@ -6,6 +6,8 @@ import { z } from "zod";
 import { signIn, auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -15,6 +17,17 @@ const registerSchema = z.object({
 });
 
 export async function registerUser(formData: FormData) {
+  // Rate limit: 5/hour per IP — check before any DB work
+  try {
+    const hdrs = await headers();
+    const ip = getClientIp(hdrs);
+    if (!checkRateLimit(`register:${ip}`, 5, 60 * 60 * 1000)) {
+      return { ok: false, code: "RATE_LIMITED", message: "註冊過於頻繁，請稍後再試" };
+    }
+  } catch {
+    // headers() may fail in some contexts (tests); fail open for availability,
+    // per-instance limit still applies on next call via IP fallback "unknown"
+  }
   const raw = {
     email: String(formData.get("email") ?? "").trim().toLowerCase(),
     password: String(formData.get("password") ?? ""),
