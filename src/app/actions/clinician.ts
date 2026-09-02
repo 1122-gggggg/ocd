@@ -6,9 +6,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import { r2, R2_BUCKET, r2Enabled } from "@/lib/r2";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 
 export async function createClinicianApplication(formData: FormData) {
-  const session = await auth() as unknown as { user?: { id: string; memberType: string } } | null;
+  const session = (await auth()) as unknown as { user?: { id: string; memberType: string } } | null;
   if (!session?.user?.id) return { ok: false, code: "UNAUTHORIZED" };
   const dbUser = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!dbUser) return { ok: false, code: "NOT_FOUND" };
@@ -39,16 +41,27 @@ export async function createClinicianApplication(formData: FormData) {
       "application/pdf": "pdf",
     };
     const ext = extMap[file.type] ?? "bin";
-    const dir = path.resolve("uploads/clinician-proof");
-    await mkdir(dir, { recursive: true });
-    const filename = `${dbUser.id}-${Date.now()}.${ext}`;
-    const fullPath = path.join(dir, filename);
+    const key = `${dbUser.id}-${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(fullPath, buffer);
-    proofPath = fullPath;
+    if (r2Enabled && r2) {
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: R2_BUCKET,
+          Key: key,
+          Body: buffer,
+          ContentType: file.type,
+        })
+      );
+      proofPath = `r2://${R2_BUCKET}/${key}`;
+    } else {
+      const dir = path.resolve("uploads/clinician-proof");
+      await mkdir(dir, { recursive: true });
+      const fullPath = path.join(dir, key);
+      await writeFile(fullPath, buffer);
+      proofPath = fullPath;
+    }
   }
 
-  // Upsert: same user resubmit -> update and PENDING
   const existing = await prisma.clinicianApplication.findUnique({ where: { userId: dbUser.id } });
   if (existing) {
     await prisma.clinicianApplication.update({
@@ -83,7 +96,7 @@ export async function createClinicianApplication(formData: FormData) {
 }
 
 export async function reviewClinicianApplication(formData: FormData) {
-  const session = await auth() as unknown as { user?: { role: string } } | null;
+  const session = (await auth()) as unknown as { user?: { role: string } } | null;
   if (!session?.user || session.user.role !== "ADMIN") return { ok: false, code: "FORBIDDEN" };
   const id = String(formData.get("id") ?? "");
   const status = String(formData.get("status") ?? "");
