@@ -34,11 +34,8 @@
     "remark-gfm": "^4.0.1",
     "zod": "^4.5.4"
   },
-  "optionalDependencies": {
-    "@sentry/nextjs": "^9.12.0"
-  },
   "_notes": {
-    "sentry": "Optional: install @sentry/nextjs to enable error monitoring — see next.config.ts TODO and instrumentation.ts (withSentry no-op wrapper)"
+    "sentry": "Not installed. To enable error monitoring run `npm i @sentry/nextjs`, then follow the TODO in next.config.ts (withSentry is a no-op wrapper) and instrumentation.ts"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
