@@ -8,8 +8,8 @@ describe("preferRequestHost", () => {
 
   afterEach(() => {
     for (const key of KEYS) {
-      if (snapshot[key] === undefined) delete process.env[key];
-      else process.env[key] = snapshot[key];
+      delete process.env[key];
+      if (snapshot[key] !== undefined) process.env[key] = snapshot[key];
     }
   });
 

@@ -4,10 +4,14 @@
  */
 export function preferRequestHost(): void {
   if (process.env.VERCEL !== "1") return;
-  const env = process.env as Record<string, string | undefined>;
-  env.AUTH_URL = "";
-  env.NEXTAUTH_URL = "";
-  env.AUTH_TRUST_HOST = "true";
+  try {
+    const env = process.env as Record<string, string | undefined>;
+    env.AUTH_URL = "";
+    env.NEXTAUTH_URL = "";
+    env.AUTH_TRUST_HOST = "true";
+  } catch {
+    // Edge process.env may be read-only; next.config env + trustHost still apply.
+  }
 }
 
 preferRequestHost();
