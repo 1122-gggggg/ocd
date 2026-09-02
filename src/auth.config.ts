@@ -1,6 +1,8 @@
+import "./lib/prefer-request-host";
 import type { NextAuthConfig } from "next-auth";
 
 export const authConfig = {
+  trustHost: true,
   pages: { signIn: "/login" },
   session: { strategy: "jwt" as const },
   callbacks: {

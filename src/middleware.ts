@@ -1,10 +1,12 @@
 import NextAuth from "next-auth";
 import { authConfig } from "./auth.config";
 import { NextResponse } from "next/server";
+import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
+import { preferRequestHost } from "./lib/prefer-request-host";
 
 const { auth } = NextAuth(authConfig);
 
-export default auth((req) => {
+const withSession = auth((req) => {
   const pathname = req.nextUrl.pathname;
   const session = req.auth as unknown as {
     user?: {
@@ -42,6 +44,12 @@ export default auth((req) => {
 
   return NextResponse.next();
 });
+
+export default function middleware(req: NextRequest, event: NextFetchEvent) {
+  // Clear stale AUTH_URL before Auth.js rewrites the request origin.
+  preferRequestHost();
+  return (withSession as unknown as NextMiddleware)(req, event);
+}
 
 export const config = {
   matcher: [
