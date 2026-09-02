@@ -6,8 +6,10 @@ import { canReply } from "@/lib/permissions";
 import { createReply, updatePost, deletePost, updateReply, deleteReply } from "@/app/actions/posts";
 import { createReport } from "@/app/actions/reports";
 import { PostForm } from "@/components/PostForm";
+import { AuthorMeta, Pagination } from "@/components/ui";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 
 const REPLY_PAGE_SIZE = 50;
 
@@ -23,6 +25,20 @@ function parsePage(value: string | string[] | undefined): number {
   const n = parseInt(raw ?? "1", 10);
   if (!Number.isFinite(n) || n < 1) return 1;
   return n;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const post = await prisma.post.findUnique({
+    where: { id },
+    select: { title: true, deletedAt: true },
+  });
+  if (!post || post.deletedAt) return { title: "文章不存在" };
+  return { title: post.title };
 }
 
 export default async function PostPage({
@@ -49,6 +65,7 @@ export default async function PostPage({
       bodyMd: true,
       isAnonymous: true,
       createdAt: true,
+      updatedAt: true,
       deletedAt: true,
       author: { select: authorSelect },
       board: { select: { id: true, slug: true, name: true, group: true, status: true } },
@@ -86,202 +103,291 @@ export default async function PostPage({
 
   const isAdmin = viewer?.role === "ADMIN";
   const isDeleted = !!post.deletedAt;
-
   const canDoReply = canReply(viewer, { status: board.status, slug: board.slug }, { deletedAt: post.deletedAt });
+
+  const postAuthor = publicAuthorLabel(
+    { isAnonymous: post.isAnonymous, author: post.author, authorId: post.authorId },
+    viewer
+  );
 
   const boundReply = createReply.bind(null, id);
 
   return (
     <div className="space-y-6">
-      <Link href={`/b/${slug}`} className="text-sm underline text-[#2F6F6A]">
-        ← 返回 {board.name}
-      </Link>
+      <nav className="text-xs text-subtle" aria-label="麵包屑">
+        <Link href="/" className="hover:text-accent">
+          首頁
+        </Link>
+        <span className="mx-1.5">/</span>
+        <Link href={`/b/${slug}`} className="hover:text-accent">
+          {board.name}
+        </Link>
+      </nav>
 
-      <div className="bg-white rounded-lg border border-[#E5E0D5] p-6 space-y-3">
+      {/* Original post */}
+      <article className="card card-pad space-y-4">
         {isDeleted && !isAdmin ? (
-          <div className="text-gray-500 italic">此內容已由管理員移除</div>
+          <p className="text-muted italic">此內容已由管理員移除。</p>
         ) : (
           <>
-            <h1 className="text-xl font-bold">{post.title}</h1>
-            <div className="text-xs text-gray-500 flex gap-2 items-center">
-              {(() => {
-                const { label, badge } = publicAuthorLabel(
-                  { isAnonymous: post.isAnonymous, author: post.author, authorId: post.authorId },
-                  viewer
-                );
-                return (
-                  <>
-                    <span>{label}</span>
-                    {badge && <span className="px-1.5 py-0.5 rounded bg-[#F7F4EE] border text-[10px]">{badge}</span>}
-                  </>
-                );
-              })()}
-              <span>{new Date(post.createdAt).toLocaleString("zh-TW")}</span>
-              {isDeleted && <span className="text-red-600">（已刪除）</span>}
-            </div>
-            <div className="prose prose-sm max-w-none border-t pt-4">
+            <header className="space-y-3">
+              <h1 className="text-2xl font-bold tracking-tight name-clip">{post.title}</h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <AuthorMeta
+                  label={postAuthor.label}
+                  badge={postAuthor.badge}
+                  anonymous={postAuthor.anonymous}
+                  at={post.createdAt}
+                />
+                {post.updatedAt.getTime() - post.createdAt.getTime() > 1000 && (
+                  <span className="badge">已編輯</span>
+                )}
+                {isDeleted && <span className="badge badge-danger">已刪除</span>}
+              </div>
+            </header>
+
+            <div className="prose border-t border-line pt-4">
               <Markdown>{post.bodyMd}</Markdown>
             </div>
+
             {isDeleted && isAdmin && (
-              <div className="text-xs text-red-600 bg-red-50 p-2 rounded">管理員可見：此文已被刪除，原文如下保留但公開隱藏。</div>
+              <p className="alert alert-error">
+                管理員可見：此文已被刪除，原文保留但對外隱藏。
+              </p>
             )}
-            {!isDeleted && viewer && (post.authorId === viewer.id || isAdmin) && (
-              <div className="flex gap-2 items-start flex-wrap">
-                <details className="flex-1 min-w-[280px]">
-                  <summary className="text-xs cursor-pointer text-[#2F6F6A] hover:underline">編輯</summary>
-                  <form action={updatePost.bind(null, post.id) as unknown as string} className="mt-2 space-y-2 border rounded p-3 bg-gray-50">
-                    <input name="title" defaultValue={post.title} required maxLength={80} placeholder="標題 1-80 字" className="w-full border rounded px-2 py-1 text-sm" />
-                    <textarea name="bodyMd" defaultValue={post.bodyMd} required maxLength={20000} rows={6} placeholder="正文 1-20000 字" className="w-full border rounded px-2 py-1 text-sm" />
-                    <button type="submit" className="text-xs px-3 py-1 rounded bg-[#2F6F6A] text-white hover:opacity-90">儲存</button>
-                  </form>
-                </details>
-                <form action={deletePost.bind(null, post.id) as unknown as string}>
-                  <button type="submit" className="text-xs px-3 py-1 rounded bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 mt-1">刪除</button>
-                </form>
+
+            {!isDeleted && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+                {viewer && (post.authorId === viewer.id || isAdmin) && (
+                  <>
+                    <details className="w-full">
+                      <summary className="btn btn-ghost btn-sm">✎ 編輯</summary>
+                      <form
+                        action={updatePost.bind(null, post.id) as unknown as string}
+                        className="mt-3 space-y-2 rounded-lg border border-line bg-surface-2 p-3"
+                      >
+                        <div>
+                          <label className="label" htmlFor={`t-${post.id}`}>
+                            標題
+                          </label>
+                          <input
+                            id={`t-${post.id}`}
+                            name="title"
+                            defaultValue={post.title}
+                            required
+                            maxLength={80}
+                            className="input"
+                          />
+                        </div>
+                        <div>
+                          <label className="label" htmlFor={`b-${post.id}`}>
+                            正文
+                          </label>
+                          <textarea
+                            id={`b-${post.id}`}
+                            name="bodyMd"
+                            defaultValue={post.bodyMd}
+                            required
+                            maxLength={20000}
+                            rows={8}
+                            className="textarea mono"
+                          />
+                        </div>
+                        <button type="submit" className="btn btn-primary btn-sm">
+                          儲存變更
+                        </button>
+                      </form>
+                    </details>
+                    <form action={deletePost.bind(null, post.id) as unknown as string}>
+                      <button type="submit" className="btn btn-danger btn-sm">
+                        刪除
+                      </button>
+                    </form>
+                  </>
+                )}
+                {session?.user && post.authorId !== viewer?.id && (
+                  <ReportBox targetType="POST" targetId={post.id} />
+                )}
               </div>
-            )}
-            {!isDeleted && session?.user && post.authorId !== viewer?.id && (
-              <details className="mt-2">
-                <summary className="text-xs cursor-pointer text-gray-500 hover:text-[#2F6F6A]">舉報</summary>
-                <form action={createReport as unknown as string} className="mt-2 space-y-2 border rounded p-3 bg-gray-50">
-                  <input type="hidden" name="targetType" value="POST" />
-                  <input type="hidden" name="targetId" value={post.id} />
-                  <textarea
-                    name="reason"
-                    required
-                    minLength={10}
-                    maxLength={500}
-                    placeholder="請說明理由（10–500 字）"
-                    className="w-full border rounded px-2 py-1 text-sm"
-                    rows={3}
-                  />
-                  <button type="submit" className="text-xs px-3 py-1 rounded bg-white border hover:bg-gray-100">
-                    送出舉報
-                  </button>
-                </form>
-              </details>
             )}
           </>
         )}
-      </div>
+      </article>
 
-      <div className="space-y-3">
-        <h2 className="font-bold">回覆（{totalReplies}）</h2>
+      {/* Replies */}
+      <section className="space-y-3">
+        <h2 className="section-title" id="replies">
+          回覆
+          <span className="text-xs font-normal text-subtle">{totalReplies} 則</span>
+        </h2>
+
         {replies.length === 0 ? (
-          <div className="text-sm text-gray-500">尚無回覆</div>
+          <div className="card card-pad text-center text-sm text-muted">
+            還沒有人回覆。你的一句話，可能就是有人今天需要的。
+          </div>
         ) : (
-          replies.map((r) => {
-            const deleted = !!r.deletedAt;
-            if (deleted && !isAdmin) {
-              return (
-                <div key={r.id} className="bg-white rounded-lg border border-[#E5E0D5] p-4">
-                  <div className="text-sm text-gray-500 italic">此內容已由管理員移除</div>
-                  <div className="text-xs text-gray-400">#{r.floor}・{new Date(r.createdAt).toLocaleString("zh-TW")}</div>
-                </div>
+          <ol className="space-y-2">
+            {replies.map((r) => {
+              const deleted = !!r.deletedAt;
+              if (deleted && !isAdmin) {
+                return (
+                  <li key={r.id} className="card p-4">
+                    <div className="flex items-center gap-2 text-xs text-subtle">
+                      <span className="mono">#{r.floor}</span>
+                      <span className="italic">此內容已由管理員移除</span>
+                    </div>
+                  </li>
+                );
+              }
+              const { label, badge, anonymous } = publicAuthorLabel(
+                { isAnonymous: r.isAnonymous, author: r.author, authorId: r.authorId },
+                viewer
               );
-            }
-            const { label, badge } = publicAuthorLabel(
-              { isAnonymous: r.isAnonymous, author: r.author, authorId: r.authorId },
-              viewer
-            );
-            return (
-              <div key={r.id} className="bg-white rounded-lg border border-[#E5E0D5] p-4 space-y-2">
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <span className="font-mono">#{r.floor}</span>
-                  {r.replyToFloor && <span>回覆 #{r.replyToFloor}</span>}
-                  <span>{label}</span>
-                  {badge && <span className="px-1.5 py-0.5 rounded bg-[#F7F4EE] border text-[10px]">{badge}</span>}
-                  <span>{new Date(r.createdAt).toLocaleString("zh-TW")}</span>
-                  {deleted && <span className="text-red-600">（已刪）</span>}
-                </div>
-                <div className="prose prose-sm max-w-none">
-                  <Markdown>{r.bodyMd}</Markdown>
-                </div>
-                {!deleted && viewer && (r.authorId === viewer.id || isAdmin) && (
-                  <div className="flex gap-2 items-start flex-wrap">
-                    <details className="flex-1 min-w-[260px]">
-                      <summary className="text-xs cursor-pointer text-[#2F6F6A] hover:underline">編輯</summary>
-                      <form action={updateReply.bind(null, r.id) as unknown as string} className="mt-2 space-y-2 border rounded p-3 bg-gray-50">
-                        <textarea name="bodyMd" defaultValue={r.bodyMd} required maxLength={20000} rows={4} placeholder="正文 1-20000 字" className="w-full border rounded px-2 py-1 text-sm" />
-                        <button type="submit" className="text-xs px-3 py-1 rounded bg-[#2F6F6A] text-white hover:opacity-90">儲存</button>
-                      </form>
-                    </details>
-                    <form action={deleteReply.bind(null, r.id) as unknown as string}>
-                      <button type="submit" className="text-xs px-3 py-1 rounded bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 mt-1">刪除</button>
-                    </form>
+              return (
+                <li key={r.id} id={`f${r.floor}`} className="card p-4 space-y-3 scroll-mt-20">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                    <a
+                      href={`#f${r.floor}`}
+                      className="mono text-xs text-subtle hover:text-accent shrink-0"
+                      aria-label={`第 ${r.floor} 樓`}
+                    >
+                      #{r.floor}
+                    </a>
+                    <AuthorMeta
+                      label={label}
+                      badge={badge}
+                      anonymous={anonymous}
+                      at={r.createdAt}
+                      relative
+                    />
+                    {r.replyToFloor != null && (
+                      <a href={`#f${r.replyToFloor}`} className="badge hover:text-accent">
+                        ↩ #{r.replyToFloor}
+                      </a>
+                    )}
+                    {deleted && <span className="badge badge-danger">已刪</span>}
                   </div>
-                )}
-                {!deleted && session?.user && r.authorId !== viewer?.id && (
-                  <details className="mt-1">
-                    <summary className="text-xs cursor-pointer text-gray-500">舉報</summary>
-                    <form action={createReport as unknown as string} className="mt-2 space-y-2 border rounded p-3 bg-gray-50">
-                      <input type="hidden" name="targetType" value="REPLY" />
-                      <input type="hidden" name="targetId" value={r.id} />
-                      <textarea
-                        name="reason"
-                        required
-                        minLength={10}
-                        maxLength={500}
-                        placeholder="理由 10–500 字"
-                        className="w-full border rounded px-2 py-1 text-sm"
-                        rows={2}
-                      />
-                      <button type="submit" className="text-xs px-3 py-1 rounded bg-white border hover:bg-gray-100">
-                        送出舉報
-                      </button>
-                    </form>
-                  </details>
-                )}
-              </div>
-            );
-          })
-        )}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 text-sm pt-2">
-            {currentPage > 1 ? (
-              <Link
-                href={`/b/${slug}/p/${id}?page=${currentPage - 1}`}
-                className="px-3 py-1 rounded border bg-white hover:bg-gray-50"
-              >
-                上一頁
-              </Link>
-            ) : (
-              <span className="px-3 py-1 rounded border bg-gray-100 text-gray-400 cursor-not-allowed">上一頁</span>
-            )}
-            <span className="text-gray-600">
-              第 {currentPage} 頁 / 共 {totalPages} 頁（{totalReplies} 則回覆）
-            </span>
-            {currentPage < totalPages ? (
-              <Link
-                href={`/b/${slug}/p/${id}?page=${currentPage + 1}`}
-                className="px-3 py-1 rounded border bg-white hover:bg-gray-50"
-              >
-                下一頁
-              </Link>
-            ) : (
-              <span className="px-3 py-1 rounded border bg-gray-100 text-gray-400 cursor-not-allowed">下一頁</span>
-            )}
-          </div>
-        )}
-      </div>
 
-      <div className="bg-white rounded-lg border border-[#E5E0D5] p-6">
-        <h3 className="font-bold mb-3">發表回覆</h3>
+                  <div className="prose prose-sm">
+                    <Markdown>{r.bodyMd}</Markdown>
+                  </div>
+
+                  {!deleted && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {viewer && (r.authorId === viewer.id || isAdmin) && (
+                        <>
+                          <details className="w-full">
+                            <summary className="btn btn-ghost btn-sm">✎ 編輯</summary>
+                            <form
+                              action={updateReply.bind(null, r.id) as unknown as string}
+                              className="mt-3 space-y-2 rounded-lg border border-line bg-surface-2 p-3"
+                            >
+                              <textarea
+                                name="bodyMd"
+                                defaultValue={r.bodyMd}
+                                required
+                                maxLength={20000}
+                                rows={5}
+                                className="textarea mono"
+                                aria-label="回覆內容"
+                              />
+                              <button type="submit" className="btn btn-primary btn-sm">
+                                儲存變更
+                              </button>
+                            </form>
+                          </details>
+                          <form action={deleteReply.bind(null, r.id) as unknown as string}>
+                            <button type="submit" className="btn btn-danger btn-sm">
+                              刪除
+                            </button>
+                          </form>
+                        </>
+                      )}
+                      {session?.user && r.authorId !== viewer?.id && (
+                        <ReportBox targetType="REPLY" targetId={r.id} />
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          hrefFor={(n) => `/b/${slug}/p/${id}?page=${n}`}
+          summary={`${totalReplies} 則`}
+        />
+      </section>
+
+      {/* Reply composer */}
+      <section className="card card-pad space-y-3">
+        <h2 className="section-title">發表回覆</h2>
         {!session?.user ? (
-          <div className="text-sm text-gray-600">
-            請先 <Link href={`/login?callbackUrl=/b/${slug}/p/${id}`} className="underline text-[#2F6F6A]">登入</Link> 後回覆。
-          </div>
+          <p className="text-sm text-muted">
+            請先{" "}
+            <Link
+              href={`/login?callbackUrl=/b/${slug}/p/${id}`}
+              className="text-accent underline underline-offset-2"
+            >
+              登入
+            </Link>{" "}
+            後回覆。
+          </p>
         ) : !canDoReply ? (
-          <div className="text-sm text-gray-500">無法回覆（文章已刪除或版區關閉）。</div>
+          <p className="alert">無法回覆：文章已刪除或版區已關閉。</p>
         ) : (
           <>
-            <PostForm postId={id} action={boundReply as unknown as (formData: FormData) => Promise<void>} isReply submitLabel="回覆" />
-            <p className="text-xs text-gray-500 mt-2">
-              求助資源 — 衛生福利部安心專線 1925（24 小時）｜ https://www.iasp.info/suicidalthoughts/
+            <PostForm
+              postId={id}
+              action={boundReply as unknown as (formData: FormData) => Promise<void>}
+              isReply
+              submitLabel="送出回覆"
+            />
+            <p className="hint">
+              求助資源 — 衛生福利部安心專線 1925（24 小時）｜{" "}
+              <a
+                href="https://www.iasp.info/suicidalthoughts/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2"
+              >
+                IASP
+              </a>
             </p>
           </>
         )}
-      </div>
+      </section>
     </div>
+  );
+}
+
+function ReportBox({ targetType, targetId }: { targetType: "POST" | "REPLY"; targetId: string }) {
+  return (
+    <details className="w-full">
+      <summary className="btn btn-ghost btn-sm">⚑ 舉報</summary>
+      <form
+        action={createReport as unknown as string}
+        className="mt-3 space-y-2 rounded-lg border border-line bg-surface-2 p-3"
+      >
+        <input type="hidden" name="targetType" value={targetType} />
+        <input type="hidden" name="targetId" value={targetId} />
+        <textarea
+          name="reason"
+          required
+          minLength={10}
+          maxLength={500}
+          placeholder="請說明理由（10–500 字）"
+          className="textarea"
+          rows={3}
+          aria-label="舉報理由"
+        />
+        <button type="submit" className="btn btn-secondary btn-sm">
+          送出舉報
+        </button>
+      </form>
+    </details>
   );
 }

@@ -18,10 +18,22 @@ type ContentLike = {
   authorId: string;
 };
 
+export type AuthorDisplay = {
+  label: string;
+  badge: string | null;
+  /**
+   * True whenever the post was submitted anonymously — including the
+   * admin-visible case where the real nickname is appended. Callers must use
+   * this rather than sniffing the label, since nicknames are free-form and a
+   * user may legitimately be called "匿名".
+   */
+  anonymous: boolean;
+};
+
 export function publicAuthorLabel(
   content: ContentLike,
   viewer: ViewerLike
-): { label: string; badge: string | null } {
+): AuthorDisplay {
   const viewerForCheck = viewer as unknown as {
     id: string;
     role: string;
@@ -30,7 +42,7 @@ export function publicAuthorLabel(
   const isAnon =
     content.isAnonymous && !canSeeAuthor(viewerForCheck, content.authorId);
   if (isAnon) {
-    return { label: "匿名", badge: null };
+    return { label: "匿名", badge: null, anonymous: true };
   }
   const author = content.author;
   let badge: string | null = null;
@@ -46,10 +58,14 @@ export function publicAuthorLabel(
   }
 
   if (content.isAnonymous && canSeeAuthor(viewerForCheck, content.authorId)) {
-    return { label: `匿名（管理員可見：${author.nickname}）`, badge };
+    return {
+      label: `匿名（管理員可見：${author.nickname}）`,
+      badge,
+      anonymous: true,
+    };
   }
 
-  return { label: author.nickname, badge };
+  return { label: author.nickname, badge, anonymous: false };
 }
 
 export function authorBadge(

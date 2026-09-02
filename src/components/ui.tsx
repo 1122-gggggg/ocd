@@ -1,0 +1,172 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { formatDateTime, formatRelative, initialOf } from "@/lib/format";
+
+/* ── Avatar ──────────────────────────────────────────────────── */
+
+export function Avatar({
+  name,
+  anonymous = false,
+  size = "md",
+}: {
+  name: string;
+  anonymous?: boolean;
+  size?: "sm" | "md";
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={[
+        "avatar",
+        size === "sm" ? "avatar-sm" : "",
+        anonymous ? "avatar-anon" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {anonymous ? "＊" : initialOf(name)}
+    </span>
+  );
+}
+
+/* ── Author line ─────────────────────────────────────────────── */
+
+export function AuthorMeta({
+  label,
+  badge,
+  anonymous,
+  at,
+  relative = false,
+  extra,
+}: {
+  label: string;
+  badge?: string | null;
+  anonymous?: boolean;
+  at?: Date | string | number;
+  relative?: boolean;
+  extra?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted min-w-0">
+      <Avatar name={label} anonymous={anonymous} size="sm" />
+      <span className="font-medium text-fg name-clip-1" title={label}>
+        {label}
+      </span>
+      {badge && <span className="badge badge-accent">{badge}</span>}
+      {at && (
+        <time
+          dateTime={new Date(at).toISOString()}
+          title={formatDateTime(at)}
+          className="text-subtle shrink-0"
+        >
+          {relative ? formatRelative(at) : formatDateTime(at)}
+        </time>
+      )}
+      {extra}
+    </div>
+  );
+}
+
+/* ── Page header ─────────────────────────────────────────────── */
+
+export function PageHeader({
+  title,
+  description,
+  actions,
+  eyebrow,
+}: {
+  title: string;
+  description?: ReactNode;
+  actions?: ReactNode;
+  eyebrow?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="min-w-0 space-y-1">
+        {eyebrow && <div className="text-xs font-medium text-accent">{eyebrow}</div>}
+        <h1 className="text-2xl font-bold tracking-tight name-clip">{title}</h1>
+        {description && (
+          <div className="text-sm text-muted leading-relaxed">{description}</div>
+        )}
+      </div>
+      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+    </div>
+  );
+}
+
+/* ── Empty state ─────────────────────────────────────────────── */
+
+export function EmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="card card-pad text-center space-y-2 py-10">
+      <p className="font-medium text-fg">{title}</p>
+      {description && <p className="text-sm text-muted">{description}</p>}
+      {action && <div className="pt-2">{action}</div>}
+    </div>
+  );
+}
+
+/* ── Pagination ──────────────────────────────────────────────── */
+
+export function Pagination({
+  currentPage,
+  totalPages,
+  hrefFor,
+  summary,
+}: {
+  currentPage: number;
+  totalPages: number;
+  hrefFor: (page: number) => string;
+  summary?: string;
+}) {
+  if (totalPages <= 1) return null;
+  const hasPrev = currentPage > 1;
+  const hasNext = currentPage < totalPages;
+
+  return (
+    <nav
+      className="flex flex-wrap items-center justify-center gap-3 pt-2"
+      aria-label="分頁"
+    >
+      {hasPrev ? (
+        <Link href={hrefFor(currentPage - 1)} className="btn btn-secondary btn-sm" rel="prev">
+          ← 上一頁
+        </Link>
+      ) : (
+        <span className="btn btn-secondary btn-sm" aria-disabled="true" style={{ opacity: 0.45 }}>
+          ← 上一頁
+        </span>
+      )}
+      <span className="text-xs text-muted tabular-nums">
+        第 {currentPage} / {totalPages} 頁{summary ? `・${summary}` : ""}
+      </span>
+      {hasNext ? (
+        <Link href={hrefFor(currentPage + 1)} className="btn btn-secondary btn-sm" rel="next">
+          下一頁 →
+        </Link>
+      ) : (
+        <span className="btn btn-secondary btn-sm" aria-disabled="true" style={{ opacity: 0.45 }}>
+          下一頁 →
+        </span>
+      )}
+    </nav>
+  );
+}
+
+/* ── Group label ─────────────────────────────────────────────── */
+
+export const GROUP_LABELS: Record<string, string> = {
+  SYMPTOM: "症狀",
+  TREATMENT: "治療",
+  COMMUNITY: "社群",
+};
+
+export const GROUP_ORDER = ["SYMPTOM", "TREATMENT", "COMMUNITY"] as const;

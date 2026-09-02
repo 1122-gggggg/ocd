@@ -18,12 +18,18 @@ export const getCachedHomeBoards = unstable_cache(
     return prisma.board.findMany({
       where: { status: "ACTIVE" },
       orderBy: { slug: "asc" },
-      include: {
+      select: {
+        slug: true,
+        name: true,
+        group: true,
+        description: true,
         posts: {
+          where: { deletedAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { createdAt: true },
+          select: { createdAt: true, title: true },
         },
+        _count: { select: { posts: { where: { deletedAt: null } } } },
       },
     });
   },

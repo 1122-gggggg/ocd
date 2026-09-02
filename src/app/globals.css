@@ -1,19 +1,597 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────
+   Design tokens
+   Semantic names only. Light values live on :root; the dark set
+   overrides the same names under prefers-color-scheme, so every
+   utility built from them (bg-surface, text-muted, …) flips
+   automatically and no `dark:` variants are needed in markup.
+   ───────────────────────────────────────────────────────────── */
 :root {
-  --background: #F7F4EE;
-  --foreground: #1F2933;
-  --primary: #2F6F6A;
+  color-scheme: light;
+
+  --bg: #f7f4ee;
+  --bg-tint: #f1ece2;
+  --surface: #ffffff;
+  --surface-2: #faf8f4;
+  --surface-3: #f2eee6;
+
+  --border: #e5e0d5;
+  --border-strong: #d3ccbc;
+
+  --fg: #1f2933;
+  --fg-muted: #5b6672;
+  --fg-subtle: #8a939e;
+
+  --accent: #2f6f6a;
+  --accent-hover: #255a55;
+  --accent-soft: #e6f0ef;
+  --accent-fg: #ffffff;
+  --accent-ring: rgba(47, 111, 106, 0.35);
+
+  --danger: #b42318;
+  --danger-soft: #fef3f2;
+  --danger-border: #f4c7c3;
+
+  --success: #197a48;
+  --success-soft: #edf7f1;
+  --success-border: #b9e0c9;
+
+  --warning: #94620a;
+  --warning-soft: #fdf6e6;
+  --warning-border: #eedcae;
+
+  --shadow-card: 0 1px 2px rgba(31, 41, 51, 0.04);
+  --shadow-lift: 0 6px 20px -8px rgba(31, 41, 51, 0.18);
+  --shadow-pop: 0 12px 32px -10px rgba(31, 41, 51, 0.28);
+
+  --radius: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg: #14181b;
+    --bg-tint: #191e22;
+    --surface: #1d2327;
+    --surface-2: #222a2e;
+    --surface-3: #2a3338;
+
+    --border: #333d43;
+    --border-strong: #465258;
+
+    --fg: #e8eaec;
+    --fg-muted: #a3aeb5;
+    --fg-subtle: #7c878e;
+
+    --accent: #6fbdb4;
+    --accent-hover: #8ad0c7;
+    --accent-soft: #1f2f2e;
+    --accent-fg: #10201e;
+    --accent-ring: rgba(111, 189, 180, 0.4);
+
+    --danger: #f2867c;
+    --danger-soft: #2a1c1b;
+    --danger-border: #55302d;
+
+    --success: #6fc796;
+    --success-soft: #182620;
+    --success-border: #2d4c3a;
+
+    --warning: #dfb45c;
+    --warning-soft: #272014;
+    --warning-border: #4d3f1f;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-lift: 0 6px 20px -8px rgba(0, 0, 0, 0.6);
+    --shadow-pop: 0 12px 32px -10px rgba(0, 0, 0, 0.7);
+  }
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-bg-tint: var(--bg-tint);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-border);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-border);
+
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-border);
+
+  /* Legacy aliases so any leftover bg-background/text-foreground still works */
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+
   --font-sans: var(--font-noto-sans-tc);
+  --radius-card: var(--radius);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-noto-sans-tc), system-ui, sans-serif;
+/* ─────────────────────────────────────────────────────────────
+   Base
+   ───────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-noto-sans-tc), ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.7;
+    text-wrap: pretty;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: 1.35;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  /* One consistent focus treatment for every interactive element. */
+  :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--fg);
+  }
+
+  summary {
+    cursor: pointer;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  hr {
+    border-color: var(--border);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Components
+   ───────────────────────────────────────────────────────────── */
+@layer components {
+  /* Surfaces ------------------------------------------------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-pad {
+    padding: 1.25rem;
+  }
+  @media (min-width: 640px) {
+    .card-pad {
+      padding: 1.5rem;
+    }
+  }
+
+  .card-link {
+    display: block;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.15s ease;
+  }
+  .card-link:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    box-shadow: var(--shadow-lift);
+    transform: translateY(-1px);
+  }
+  .card-link:active {
+    transform: translateY(0);
+  }
+
+  /* Buttons -------------------------------------------------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.6rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    white-space: nowrap;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      opacity 0.15s ease;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--fg);
+    border-color: var(--border-strong);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-2);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--fg-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-3);
+    color: var(--fg);
+  }
+
+  .btn-danger {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: var(--danger-border);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 12%, var(--danger-soft));
+  }
+
+  .btn-sm {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.78rem;
+    border-radius: 0.5rem;
+  }
+
+  .btn-lg {
+    padding: 0.65rem 1.4rem;
+    font-size: 0.95rem;
+  }
+
+  .btn-block {
+    width: 100%;
+  }
+
+  /* Form controls -------------------------------------------- */
+  .label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--fg);
+    margin-bottom: 0.375rem;
+  }
+
+  .hint {
+    font-size: 0.75rem;
+    color: var(--fg-subtle);
+    margin-top: 0.375rem;
+    line-height: 1.5;
+  }
+
+  .input,
+  .textarea,
+  .select {
+    width: 100%;
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border-strong);
+    border-radius: 0.6rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .input::placeholder,
+  .textarea::placeholder {
+    color: var(--fg-subtle);
+  }
+  .input:focus,
+  .textarea:focus,
+  .select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+  .textarea {
+    resize: vertical;
+    min-height: 6rem;
+  }
+  .select {
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--fg-subtle) 50%),
+      linear-gradient(135deg, var(--fg-subtle) 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) calc(50% + 2px),
+      calc(100% - 13px) calc(50% + 2px);
+    background-size:
+      5px 5px,
+      5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2.25rem;
+  }
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+  }
+
+  .checkbox {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  /* Badges & chips ------------------------------------------- */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    color: var(--fg-muted);
+    white-space: nowrap;
+  }
+  .badge-accent {
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    color: var(--accent);
+  }
+  .badge-success {
+    background: var(--success-soft);
+    border-color: var(--success-border);
+    color: var(--success);
+  }
+  .badge-danger {
+    background: var(--danger-soft);
+    border-color: var(--danger-border);
+    color: var(--danger);
+  }
+  .badge-warning {
+    background: var(--warning-soft);
+    border-color: var(--warning-border);
+    color: var(--warning);
+  }
+
+  /* Alerts ---------------------------------------------------- */
+  .alert {
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--fg-muted);
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  .alert-error {
+    background: var(--danger-soft);
+    border-color: var(--danger-border);
+    color: var(--danger);
+  }
+  .alert-success {
+    background: var(--success-soft);
+    border-color: var(--success-border);
+    color: var(--success);
+  }
+  .alert-info {
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+    color: var(--accent);
+  }
+
+  /* Avatar ---------------------------------------------------- */
+  .avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1;
+    overflow: hidden;
+  }
+  .avatar-sm {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: 0.68rem;
+  }
+  .avatar-anon {
+    background: var(--surface-3);
+    color: var(--fg-subtle);
+    border-color: var(--border);
+  }
+
+  /* Section heading ------------------------------------------ */
+  .section-title {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--fg);
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    border: 0;
+  }
+
+  /* Skeleton -------------------------------------------------- */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 25%,
+      var(--surface-3) 37%,
+      var(--surface-2) 63%
+    );
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+    border-radius: 0.5rem;
+  }
+  @keyframes skeleton-shimmer {
+    0% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0 50%;
+    }
+  }
+
+  /* Nicknames are unrestricted, so they must never blow out a row. */
+  .name-clip {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .name-clip-1 {
+    display: inline-block;
+    max-width: min(20rem, 60vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  /* Rendered markdown ---------------------------------------- */
+  /* The typography plugin is not installed, so `prose` is styled here. */
+  .prose {
+    color: var(--fg);
+    font-size: 0.95rem;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+  }
+  .prose > :first-child {
+    margin-top: 0;
+  }
+  .prose > :last-child {
+    margin-bottom: 0;
+  }
+  .prose p {
+    margin: 0.85em 0;
+  }
+  .prose ul,
+  .prose ol {
+    margin: 0.85em 0;
+    padding-left: 1.4em;
+  }
+  .prose ul {
+    list-style: disc;
+  }
+  .prose ol {
+    list-style: decimal;
+  }
+  .prose li {
+    margin: 0.3em 0;
+  }
+  .prose li::marker {
+    color: var(--fg-subtle);
+  }
+  .prose hr {
+    margin: 1.5em 0;
+  }
+  .prose table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .prose-sm {
+    font-size: 0.9rem;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Utilities
+   ───────────────────────────────────────────────────────────── */
+@layer utilities {
+  .container-page {
+    width: 100%;
+    max-width: 60rem;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  .container-narrow {
+    width: 100%;
+    max-width: 30rem;
+    margin-inline: auto;
+  }
+  .fade-in {
+    animation: fade-in 0.25s ease both;
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }

@@ -62,7 +62,8 @@ model User {
   emailVerified        DateTime?
   image                String?
   passwordHash         String?
-  nickname             String                @unique
+  /// Free-form display name: any text, any length, duplicates allowed.
+  nickname             String
   profileComplete      Boolean               @default(false)
   role                 UserRole              @default(USER)
   memberType           MemberType            @default(PATIENT)
@@ -76,6 +77,8 @@ model User {
   reports              Report[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
+
+  @@index([nickname])
 }
 
 model Account {

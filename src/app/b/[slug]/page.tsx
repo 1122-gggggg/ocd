@@ -3,8 +3,10 @@ import { auth } from "@/auth";
 import { Markdown } from "@/lib/markdown";
 import { canCreatePost } from "@/lib/permissions";
 import { publicAuthorLabel } from "@/lib/display";
+import { AuthorMeta, EmptyState, GROUP_LABELS, Pagination } from "@/components/ui";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 
 const BOARD_PAGE_SIZE = 20;
 
@@ -20,6 +22,20 @@ function parsePage(value: string | string[] | undefined): number {
   const n = parseInt(raw ?? "1", 10);
   if (!Number.isFinite(n) || n < 1) return 1;
   return n;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const board = await prisma.board.findUnique({
+    where: { slug },
+    select: { name: true, description: true },
+  });
+  if (!board) return { title: "版區不存在" };
+  return { title: board.name, description: board.description };
 }
 
 export default async function BoardPage({
@@ -62,90 +78,121 @@ export default async function BoardPage({
       isAnonymous: true,
       authorId: true,
       author: { select: authorSelect },
+      _count: { select: { replies: true } },
     },
   });
 
+  const postAction = canPost ? (
+    <Link href={`/b/${slug}/new`} className="btn btn-primary">
+      發表新文
+    </Link>
+  ) : session?.user ? (
+    <span className="badge">此版無發文權限</span>
+  ) : (
+    <Link href={`/login?callbackUrl=/b/${slug}/new`} className="btn btn-secondary">
+      登入後發文
+    </Link>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg border border-[#E5E0D5] p-6 space-y-3">
-        <h1 className="text-2xl font-bold">{board.name}</h1>
-        <p className="text-sm text-gray-600">{board.description}</p>
-        <div className="prose prose-sm max-w-none border-t pt-4 mt-4">
-          <Markdown>{board.officialMd}</Markdown>
-        </div>
-      </div>
+      <nav className="text-xs text-subtle" aria-label="麵包屑">
+        <Link href="/" className="hover:text-accent">
+          首頁
+        </Link>
+        <span className="mx-1.5">/</span>
+        <span>{GROUP_LABELS[board.group] ?? board.group}</span>
+        <span className="mx-1.5">/</span>
+        <span className="text-muted">{board.name}</span>
+      </nav>
 
-      <div className="flex items-center justify-between">
-        <h2 className="font-bold">討論串</h2>
-        {canPost ? (
-          <Link href={`/b/${slug}/new`} className="px-4 py-2 rounded bg-[#2F6F6A] text-white text-sm hover:bg-[#255A55]">
-            發文
-          </Link>
-        ) : session?.user ? (
-          <span className="text-sm text-gray-500">無權限發文</span>
-        ) : (
-          <Link href={`/login?callbackUrl=/b/${slug}/new`} className="px-4 py-2 rounded border text-sm hover:bg-white">
-            登入後發文
-          </Link>
+      {/* Board header */}
+      <section className="card card-pad space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="badge badge-accent">{GROUP_LABELS[board.group] ?? board.group}</span>
+              <span className="badge">{total} 篇討論</span>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight">{board.name}</h1>
+            <p className="text-sm text-muted leading-relaxed">{board.description}</p>
+          </div>
+          <div className="shrink-0">{postAction}</div>
+        </div>
+
+        {board.officialMd?.trim() && (
+          <details className="border-t border-line pt-3 group" open>
+            <summary className="flex items-center gap-2 text-sm font-medium text-accent select-none">
+              <span className="transition-transform group-open:rotate-90">▸</span>
+              版區說明
+            </summary>
+            <div className="prose prose-sm mt-3">
+              <Markdown>{board.officialMd}</Markdown>
+            </div>
+          </details>
         )}
-      </div>
+      </section>
 
-      {posts.length === 0 ? (
-        <div className="bg-white rounded-lg border border-[#E5E0D5] p-8 text-center text-gray-500">
-          尚無討論，登入後可發第一篇。
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {posts.map((p) => {
-            const { label, badge } = publicAuthorLabel(
-              { isAnonymous: p.isAnonymous, author: p.author, authorId: p.authorId },
-              viewer
-            );
-            return (
-              <Link
-                key={p.id}
-                href={`/b/${slug}/p/${p.id}`}
-                className="block bg-white rounded-lg border border-[#E5E0D5] p-4 hover:shadow-sm"
-              >
-                <div className="font-medium">{p.title}</div>
-                <div className="text-xs text-gray-500 mt-1 flex gap-2 items-center">
-                  <span>{label}</span>
-                  {badge && <span className="px-1.5 py-0.5 rounded bg-[#F7F4EE] border text-[10px]">{badge}</span>}
-                  <span>{new Date(p.createdAt).toLocaleString("zh-TW")}</span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 text-sm">
-          {currentPage > 1 ? (
-            <Link
-              href={`/b/${slug}?page=${currentPage - 1}`}
-              className="px-3 py-1 rounded border bg-white hover:bg-gray-50"
-            >
-              上一頁
-            </Link>
-          ) : (
-            <span className="px-3 py-1 rounded border bg-gray-100 text-gray-400 cursor-not-allowed">上一頁</span>
-          )}
-          <span className="text-gray-600">
-            第 {currentPage} 頁 / 共 {totalPages} 頁（{total} 篇）
+      {/* Thread list */}
+      <section className="space-y-3">
+        <h2 className="section-title">
+          討論串
+          <span className="text-xs font-normal text-subtle">
+            第 {currentPage} / {totalPages} 頁
           </span>
-          {currentPage < totalPages ? (
-            <Link
-              href={`/b/${slug}?page=${currentPage + 1}`}
-              className="px-3 py-1 rounded border bg-white hover:bg-gray-50"
-            >
-              下一頁
-            </Link>
-          ) : (
-            <span className="px-3 py-1 rounded border bg-gray-100 text-gray-400 cursor-not-allowed">下一頁</span>
-          )}
-        </div>
-      )}
+        </h2>
+
+        {posts.length === 0 ? (
+          <EmptyState
+            title="這個版還很安靜"
+            description="還沒有人在這裡發文。你的經驗，可能正好是別人在找的。"
+            action={postAction}
+          />
+        ) : (
+          <ul className="space-y-2">
+            {posts.map((p) => {
+              const { label, badge, anonymous } = publicAuthorLabel(
+                { isAnonymous: p.isAnonymous, author: p.author, authorId: p.authorId },
+                viewer
+              );
+              return (
+                <li key={p.id}>
+                  <Link
+                    href={`/b/${slug}/p/${p.id}`}
+                    className="card card-link p-4 group flex items-start gap-3"
+                  >
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="font-medium text-fg group-hover:text-accent transition-colors name-clip">
+                        {p.title}
+                      </div>
+                      <AuthorMeta
+                        label={label}
+                        badge={badge}
+                        anonymous={anonymous}
+                        at={p.createdAt}
+                        relative
+                      />
+                    </div>
+                    <span
+                      className="badge shrink-0 mt-0.5"
+                      title={`${p._count.replies} 則回覆`}
+                    >
+                      💬 {p._count.replies}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          hrefFor={(n) => `/b/${slug}?page=${n}`}
+          summary={`${total} 篇`}
+        />
+      </section>
     </div>
   );
 }

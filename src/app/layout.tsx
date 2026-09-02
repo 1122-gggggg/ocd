@@ -1,19 +1,31 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Noto_Sans_TC } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { getCachedBoards } from "@/lib/cache";
+import { SiteHeader } from "@/components/SiteHeader";
 
 const notoSansTC = Noto_Sans_TC({
   subsets: ["latin"],
   weight: ["400", "500", "700"],
   variable: "--font-noto-sans-tc",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "強迫症互助坊",
+  title: {
+    default: "強迫症互助坊",
+    template: "%s｜強迫症互助坊",
+  },
   description: "病友、家屬與臨床工作者的經驗交流與支持空間",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f7f4ee" },
+    { media: "(prefers-color-scheme: dark)", color: "#14181b" },
+  ],
 };
 
 async function Header() {
@@ -22,114 +34,75 @@ async function Header() {
   } | null;
 
   const boards = await getCachedBoards();
-  const symptom = boards.filter((b) => b.group === "SYMPTOM");
-  const treatment = boards.filter((b) => b.group === "TREATMENT");
-  const community = boards.filter((b) => b.group === "COMMUNITY");
 
-  const isAdmin = session?.user?.role === "ADMIN";
+  async function signOutAction() {
+    "use server";
+    await signOut({ redirectTo: "/" });
+  }
 
+  const user = session?.user
+    ? {
+        nickname: session.user.nickname ?? session.user.id.slice(0, 6),
+        isAdmin: session.user.role === "ADMIN",
+      }
+    : null;
+
+  return <SiteHeader boards={boards} user={user} signOutAction={signOutAction} />;
+}
+
+function Footer() {
   return (
-    <header className="border-b border-[#E5E0D5] bg-[#F7F4EE]/80 backdrop-blur sticky top-0 z-40">
-      <div className="max-w-[56rem] mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        <Link href="/" className="text-xl font-bold text-[#2F6F6A] shrink-0">
-          強迫症互助坊
-        </Link>
-        <nav className="hidden md:flex items-center gap-4 text-sm flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">症狀</span>
-            {symptom.map((b) => (
-              <Link key={b.slug} href={`/b/${b.slug}`} className="hover:text-[#2F6F6A] hover:underline">
-                {b.name}
-              </Link>
-            ))}
+    <footer className="mt-12 border-t border-line bg-surface-2">
+      <div className="container-page py-8 space-y-5 text-sm text-muted">
+        <div className="alert alert-info">
+          <span aria-hidden="true">☎</span>
+          <span>
+            如果你現在很不好受：衛生福利部安心專線 <strong>1925</strong>（24 小時免費）。
+            立即危險請撥 <strong>119</strong> 或前往最近的急診。
+          </span>
+        </div>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div className="space-y-2">
+            <div className="font-medium text-fg">關於本站</div>
+            <p className="leading-relaxed">
+              本站內容由使用者撰寫或管理員整理，僅供經驗交流，
+              <strong className="text-fg">不是醫療診斷、處方或治療建議</strong>。
+              請勿依據本站內容自行停藥或改變治療。
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">治療</span>
-            {treatment.map((b) => (
-              <Link key={b.slug} href={`/b/${b.slug}`} className="hover:text-[#2F6F6A] hover:underline">
-                {b.name}
-              </Link>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">社群</span>
-            {community.map((b) => (
-              <Link key={b.slug} href={`/b/${b.slug}`} className="hover:text-[#2F6F6A] hover:underline">
-                {b.name}
-              </Link>
-            ))}
-          </div>
-        </nav>
-        <div className="flex items-center gap-3 text-sm shrink-0">
-          {session?.user ? (
-            <>
-              <Link href="/settings" className="hover:underline">
-                {session.user.nickname ?? session.user.id.slice(0, 6)}
-              </Link>
-              {isAdmin && (
-                <Link
-                  href="/admin"
-                  className="px-3 py-1 rounded bg-[#2F6F6A] text-white hover:bg-[#255A55]"
-                >
-                  後台
+          <div className="space-y-2">
+            <div className="font-medium text-fg">求助與說明</div>
+            <ul className="space-y-1">
+              <li>
+                <Link href="/disclaimer" className="hover:text-accent underline underline-offset-2">
+                  完整免責聲明
                 </Link>
-              )}
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut({ redirectTo: "/" });
-                }}
-              >
-                <button type="submit" className="px-3 py-1 border rounded hover:bg-white">
-                  登出
-                </button>
-              </form>
-            </>
-          ) : (
-            <>
-              <Link href="/login" className="px-3 py-1 border rounded hover:bg-white">
-                登入
-              </Link>
-              <Link href="/register" className="px-3 py-1 rounded bg-[#2F6F6A] text-white hover:bg-[#255A55]">
-                註冊
-              </Link>
-            </>
-          )}
+              </li>
+              <li>
+                <Link href="/boards/apply" className="hover:text-accent underline underline-offset-2">
+                  申請開版
+                </Link>
+              </li>
+              <li>
+                <a
+                  href="https://www.iasp.info/suicidalthoughts/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-accent underline underline-offset-2"
+                >
+                  IASP 國際求助資源
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="border-t border-line pt-4 text-xs text-subtle">
+          © {new Date().getFullYear()} 強迫症互助坊
         </div>
       </div>
-      {/* mobile nav */}
-      <div className="md:hidden max-w-[56rem] mx-auto px-4 pb-3 flex flex-col gap-2 text-sm">
-        <details className="border rounded p-2 bg-white/60">
-          <summary className="cursor-pointer">版區選單</summary>
-          <div className="mt-2 flex flex-col gap-1">
-            <div className="font-medium text-xs text-gray-500 mt-1">症狀</div>
-            <div className="flex flex-wrap gap-2">
-              {symptom.map((b) => (
-                <Link key={b.slug} href={`/b/${b.slug}`} className="underline">
-                  {b.name}
-                </Link>
-              ))}
-            </div>
-            <div className="font-medium text-xs text-gray-500 mt-1">治療</div>
-            <div className="flex flex-wrap gap-2">
-              {treatment.map((b) => (
-                <Link key={b.slug} href={`/b/${b.slug}`} className="underline">
-                  {b.name}
-                </Link>
-              ))}
-            </div>
-            <div className="font-medium text-xs text-gray-500 mt-1">社群</div>
-            <div className="flex flex-wrap gap-2">
-              {community.map((b) => (
-                <Link key={b.slug} href={`/b/${b.slug}`} className="underline">
-                  {b.name}
-                </Link>
-              ))}
-            </div>
-          </div>
-        </details>
-      </div>
-    </header>
+    </footer>
   );
 }
 
@@ -139,30 +112,17 @@ export default async function RootLayout({
   return (
     <html lang="zh-Hant">
       <body className={`${notoSansTC.variable} antialiased min-h-screen flex flex-col`}>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 btn btn-primary btn-sm"
+        >
+          跳到主要內容
+        </a>
         <Header />
-        <main className="flex-1">
-          <div className="max-w-[56rem] mx-auto px-4 py-6">{children}</div>
+        <main id="main" className="flex-1">
+          <div className="container-page py-6 sm:py-8">{children}</div>
         </main>
-        <footer className="border-t border-[#E5E0D5] bg-white/60 mt-8">
-          <div className="max-w-[56rem] mx-auto px-4 py-6 text-sm text-gray-600 leading-relaxed">
-            <p>
-              本站內容由使用者撰寫或管理員整理，僅供經驗交流，不是醫療診斷、處方或治療建議。請勿依據本站內容自行停藥或改變治療。緊急狀況請撥打 1925
-              或當地緊急醫療。
-            </p>
-            <p className="mt-2">
-              衛生福利部安心專線 <strong>1925</strong>（24 小時）｜{" "}
-              <a
-                href="https://www.iasp.info/suicidalthoughts/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline text-[#2F6F6A]"
-              >
-                https://www.iasp.info/suicidalthoughts/
-              </a>{" "}
-              ｜ <Link href="/disclaimer" className="underline text-[#2F6F6A]">完整免責聲明</Link>
-            </p>
-          </div>
-        </footer>
+        <Footer />
       </body>
     </html>
   );

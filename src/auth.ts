@@ -12,34 +12,15 @@ const googleConfigured =
   !!process.env.AUTH_GOOGLE_ID && !!process.env.AUTH_GOOGLE_SECRET;
 
 const baseAdapter = PrismaAdapter(prisma);
-// Wrapper to ensure nickname for OAuth users (User.nickname is required unique)
-// Uses cuid() with uniqueness loop to avoid collisions under concurrency
+// Wrapper to seed a placeholder nickname for OAuth users (User.nickname is
+// required). Nicknames are not unique, so a single cuid-derived name is enough
+// — onboarding replaces it with whatever the user wants to be called.
 const adapter = {
   ...baseAdapter,
   createUser: async (
     data: Parameters<NonNullable<typeof baseAdapter.createUser>>[0],
   ) => {
-    let nickname: string | null = null;
-    // Try up to 5 attempts to find a unique nickname
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const candidate = `user-${cuid().slice(0, 8)}`;
-      try {
-        const existing = await prisma.user.findUnique({
-          where: { nickname: candidate },
-        });
-        if (!existing) {
-          nickname = candidate;
-          break;
-        }
-      } catch {
-        // On DB error, use candidate and let DB constraint handle it
-        nickname = candidate;
-        break;
-      }
-    }
-    if (!nickname) {
-      nickname = `user-${cuid().slice(0, 8)}`;
-    }
+    const nickname = `user-${cuid().slice(0, 8)}`;
     const withNickname = {
       ...data,
       nickname,
