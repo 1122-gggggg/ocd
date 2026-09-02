@@ -1,5 +1,8 @@
-import { auth } from "@/auth";
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
 import { NextResponse } from "next/server";
+
+const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const pathname = req.nextUrl.pathname;
@@ -11,7 +14,6 @@ export default auth((req) => {
     };
   } | null;
 
-  // Admin protection
   if (pathname.startsWith("/admin")) {
     if (!session?.user || session.user.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/login", req.url));
@@ -19,12 +21,10 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // Onboarding guard: if logged in but profile incomplete and not on allowed paths
   const isOnboarding = pathname === "/onboarding";
   const isAuthRoute = pathname.startsWith("/api/auth");
   const isLogin = pathname === "/login";
   const isRegister = pathname === "/register";
-  // Allow static assets already excluded by matcher, but double-check
   if (
     session?.user &&
     session.user.profileComplete === false &&
@@ -36,8 +36,6 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/onboarding", req.url));
   }
 
-  // If profileComplete false and trying to access onboarding when already complete? Allow.
-  // If not logged in and hits onboarding, redirect to login
   if (!session?.user && isOnboarding) {
     return NextResponse.redirect(new URL("/login", req.url));
   }

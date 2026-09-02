@@ -4,6 +4,7 @@ import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "./lib/db";
+import { authConfig } from "./auth.config";
 
 const googleConfigured =
   !!process.env.AUTH_GOOGLE_ID && !!process.env.AUTH_GOOGLE_SECRET;
@@ -25,9 +26,8 @@ const adapter: any = {
 };
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   adapter,
-  session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
   providers: [
     Credentials({
       name: "Credentials",
@@ -59,12 +59,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       : []),
   ],
   callbacks: {
+    ...authConfig.callbacks,
     async jwt({ token, user }) {
       // Edge runtime cannot use Prisma; skip DB lookup there
       const isEdge = process.env.NEXT_RUNTIME === "edge";
       if (user?.id) {
         if (isEdge) {
-          // In edge, just pass through; DB enrichment happens in Node
           token.id = user.id as string;
           return token;
         }
@@ -82,7 +82,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.email = dbUser.email;
           }
         } catch {
-          // edge or DB error: keep token as is
+          // keep token
         }
       } else if (token?.id) {
         if (isEdge) return token;
