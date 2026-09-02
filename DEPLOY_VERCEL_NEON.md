@@ -46,6 +46,7 @@ git push -u origin main
    R2_ACCESS_KEY_ID=     <R2 API access key>
    R2_SECRET_ACCESS_KEY= <R2 API secret key>
    R2_BUCKET=            ocd-proofs
+   CRON_SECRET=          openssl rand -base64 32  (每日備份 cron 用，未設定則備份端點直接 503)
    ```
    **重要**: `DATABASE_URL` 必須是 pooled (`-pooler` + `pgbouncer=true&connection_limit=10`)，`DIRECT_URL` 必須是 direct (不含 `pgbouncer=true`)，否則 `migrate deploy` 會報 `prepared statement` 錯誤。`AUTH_SECRET` 用 `openssl rand -base64 32` 產生，至少 32 字元。
 
@@ -76,7 +77,16 @@ curl -s -D - https://ocd.yourdomain.tw/b/newcomers/new | grep -q "location: /log
 
 ## 6. 維運
 
-- **備份**: Neon Dashboard → `Branches` 自動每日備份，Free 7天 PITR；重要資料另 `pg_dump` 到 R2 — 見 `scripts/backup/README.md` 與 `scripts/backup/neon-to-r2.sh`（`DIRECT_URL` 直連 + `pg_dump --no-owner | gzip | aws s3 cp --endpoint-url https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com s3://$R2_BUCKET/backups/neon-$(date +%Y%m%d).sql.gz`），Vercel `vercel.json` 已設 `crons: [{path:"/api/cron/backup", schedule:"0 3 * * *"}]` 每日 03:00 觸發
+- **備份**: 三層，缺一不可
+  1. Neon Dashboard → `Branches` 自動 PITR，Free 方案保留 7 天
+  2. **每日自動**：`vercel.json` 的 `crons` 每天 03:00 打 `GET /api/cron/backup`（`src/app/api/cron/backup/route.ts`）。它用 Prisma 把所有持久資料表 dump 成 JSON、gzip 後上傳到 `s3://$R2_BUCKET/backups/logical-YYYYMMDD.json.gz`。
+     - **需要 `CRON_SECRET`**：Vercel 會帶 `Authorization: Bearer $CRON_SECRET`。沒設這個變數，端點會直接回 `503 CRON_SECRET_NOT_CONFIGURED` 而不是放行 —— 未授權的全庫 dump 絕不能對外開放。
+     - R2 沒設定則回 `503 STORAGE_NOT_CONFIGURED`。
+     - 內容含 email 與 bcrypt 密碼雜湊（還原帳號所需），**R2 bucket 必須維持私有**。
+     - 不含 `Session` / `VerificationToken`：session 是 JWT，那些列還原了也沒意義。
+  3. **手動 / CI**：`scripts/backup/neon-to-r2.sh` 走 `DIRECT_URL` + `pg_dump --no-owner | gzip | aws s3 cp`，輸出到 `backups/neon-YYYYMMDD.sql.gz`。這是完整的 SQL dump，還原度最高，但 `pg_dump` / `aws` 在 Vercel serverless 裡不存在，所以只能在本機或 CI 跑。兩者副檔名不同，不會互相覆蓋。
+
+  驗證每日備份有在跑：Vercel → Logs 搜 `cron/backup: uploaded`，或到 R2 看 `backups/` 有沒有當天的 `logical-*.json.gz`。
 - **升級**: Vercel Hobby 100GB 頻寬足 500人，爆了再 `Vercel Pro $20`，Neon 自動 scale 不需手動
 - **上傳**: 已切 `R2` (`src/lib/r2.ts` + `R2_*` 環境變數)。`uploads/clinician-proof` 不再寫本地磁碟 (Vercel 無持久磁碟)，改由 `S3Client` 上傳至 `R2_BUCKET` (預設 `ocd-proofs`)，`proofPath` 存 R2 URL/key。
 - **日誌**: Vercel → Logs, Neon → Monitoring
