@@ -1,103 +1,66 @@
-import Image from "next/image";
+import Link from "next/link";
+import { prisma } from "@/lib/db";
 
-export default function Home() {
+export default async function HomePage() {
+  const boards = await prisma.board.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: { slug: "asc" },
+    include: {
+      posts: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { createdAt: true },
+      },
+    },
+  });
+
+  const groupLabels: Record<string, string> = {
+    SYMPTOM: "症狀",
+    TREATMENT: "治療",
+    COMMUNITY: "社群",
+  };
+  const groups: Array<"SYMPTOM" | "TREATMENT" | "COMMUNITY"> = ["SYMPTOM", "TREATMENT", "COMMUNITY"];
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="space-y-8">
+      <div className="bg-white rounded-lg p-6 border border-[#E5E0D5]">
+        <h1 className="text-2xl font-bold text-[#1F2933]">歡迎來到強迫症互助坊</h1>
+        <p className="mt-2 text-gray-600 leading-relaxed">
+          這裡是病友、家屬與臨床工作者互相支持、分享經驗的空間。請友善交流，尊重多元經驗。
+        </p>
+        <p className="mt-2 text-sm text-gray-500">
+          本站內容由使用者撰寫或管理員整理，僅供經驗交流，不是醫療診斷、處方或治療建議。
+        </p>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      {groups.map((g) => {
+        const list = boards.filter((b) => b.group === g);
+        return (
+          <section key={g} className="space-y-3">
+            <h2 className="text-lg font-bold text-[#2F6F6A] border-b border-[#E5E0D5] pb-2">
+              {groupLabels[g]}
+            </h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              {list.map((b) => {
+                const last = b.posts[0]?.createdAt;
+                return (
+                  <Link
+                    key={b.slug}
+                    href={`/b/${b.slug}`}
+                    className="block bg-white rounded-lg border border-[#E5E0D5] p-4 hover:shadow-sm hover:border-[#2F6F6A]/30 transition"
+                  >
+                    <div className="font-medium text-[#1F2933]">{b.name}</div>
+                    <div className="text-sm text-gray-600 mt-1 line-clamp-2">{b.description}</div>
+                    <div className="text-xs text-gray-400 mt-2">
+                      {last ? `最近發文：${new Date(last).toLocaleString("zh-TW")}` : "尚無討論，登入後可發第一篇。"}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
