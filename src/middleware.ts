@@ -2,7 +2,6 @@ import NextAuth from "next-auth";
 import { authConfig } from "./auth.config";
 import { NextResponse } from "next/server";
 import type { NextFetchEvent, NextMiddleware, NextRequest } from "next/server";
-import { preferRequestHost } from "./lib/prefer-request-host";
 import { checkRateLimit, getClientIp } from "./lib/rate-limit";
 const { auth } = NextAuth(authConfig);
 
@@ -61,10 +60,6 @@ export default function middleware(req: NextRequest, event: NextFetchEvent) {
       });
     }
   }
-  // Drop a stale AUTH_URL only when it mismatches this request's host.
-  preferRequestHost(
-    req.headers.get("x-forwarded-host") ?? req.headers.get("host"),
-  );
   return (withSession as unknown as NextMiddleware)(req, event);
 }
 

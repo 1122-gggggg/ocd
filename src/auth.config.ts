@@ -1,4 +1,3 @@
-import "./lib/prefer-request-host";
 import type { NextAuthConfig } from "next-auth";
 import { isAllowedHost } from "./lib/prefer-request-host";
 

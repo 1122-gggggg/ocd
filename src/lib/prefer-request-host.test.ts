@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  getCanonicalHost,
-  isAllowedHost,
-  preferRequestHost,
-} from "./prefer-request-host";
+import { getCanonicalHost, isAllowedHost } from "./prefer-request-host";
 
 const KEYS = [
   "VERCEL",
@@ -13,105 +9,22 @@ const KEYS = [
   "AUTH_TRUST_HOST",
 ] as const;
 
-describe("preferRequestHost", () => {
+function useSnapshot() {
   const snapshot: Record<string, string | undefined> = {};
-
+  function capture() {
+    for (const key of KEYS) snapshot[key] = process.env[key];
+  }
   afterEach(() => {
     for (const key of KEYS) {
       delete process.env[key];
       if (snapshot[key] !== undefined) process.env[key] = snapshot[key];
     }
   });
-
-  function capture() {
-    for (const key of KEYS) snapshot[key] = process.env[key];
-  }
-
-  it("is a no-op with no host arg (env untouched)", () => {
-    capture();
-    process.env.VERCEL = "1";
-    process.env.AUTH_URL = "https://ocd.goodman.tw";
-    process.env.NEXTAUTH_URL = "https://ocd-9q1zdz2fo-90608star-2630.vercel.app";
-    delete process.env.AUTH_TRUST_HOST;
-
-    preferRequestHost();
-
-    expect(process.env.AUTH_URL).toBe("https://ocd.goodman.tw");
-    expect(process.env.NEXTAUTH_URL).toBe(
-      "https://ocd-9q1zdz2fo-90608star-2630.vercel.app",
-    );
-    expect(process.env.AUTH_TRUST_HOST).toBeUndefined();
-  });
-
-  it("does not touch env off Vercel even with a host arg", () => {
-    capture();
-    delete process.env.VERCEL;
-    process.env.AUTH_URL = "http://localhost:3001";
-    process.env.NEXTAUTH_URL = "http://localhost:3001";
-    delete process.env.AUTH_TRUST_HOST;
-
-    preferRequestHost("something.vercel.app");
-
-    expect(process.env.AUTH_URL).toBe("http://localhost:3001");
-    expect(process.env.NEXTAUTH_URL).toBe("http://localhost:3001");
-    expect(process.env.AUTH_TRUST_HOST).toBeUndefined();
-  });
-
-  it("deletes stale AUTH_URL on Vercel when allowlisted request host mismatches canonical", () => {
-    capture();
-    process.env.VERCEL = "1";
-    process.env.AUTH_URL = "https://ocd.goodman.tw";
-    process.env.NEXTAUTH_URL = "https://ocd-9q1zdz2fo-90608star-2630.vercel.app";
-    delete process.env.AUTH_TRUST_HOST;
-
-    preferRequestHost("ocd-9q1zdz2fo-90608star-2630.vercel.app");
-
-    expect(process.env.AUTH_URL).toBeUndefined();
-    expect(process.env.NEXTAUTH_URL).toBeUndefined();
-    expect(process.env.AUTH_TRUST_HOST).toBe("true");
-  });
-
-  it("keeps AUTH_URL when request host matches canonical", () => {
-    capture();
-    process.env.VERCEL = "1";
-    process.env.AUTH_URL = "https://ocd.goodman.tw";
-    process.env.NEXTAUTH_URL = "https://ocd.goodman.tw";
-    delete process.env.AUTH_TRUST_HOST;
-
-    preferRequestHost("ocd.goodman.tw");
-
-    expect(process.env.AUTH_URL).toBe("https://ocd.goodman.tw");
-    expect(process.env.NEXTAUTH_URL).toBe("https://ocd.goodman.tw");
-    expect(process.env.AUTH_TRUST_HOST).toBe("true");
-  });
-
-  it("keeps AUTH_URL on poisoned (non-allowlisted) host", () => {
-    capture();
-    process.env.VERCEL = "1";
-    process.env.AUTH_URL = "https://ocd.goodman.tw";
-    process.env.NEXTAUTH_URL = "https://ocd.goodman.tw";
-    delete process.env.AUTH_TRUST_HOST;
-
-    preferRequestHost("evil.com");
-
-    expect(process.env.AUTH_URL).toBe("https://ocd.goodman.tw");
-    expect(process.env.NEXTAUTH_URL).toBe("https://ocd.goodman.tw");
-  });
-});
+  return { capture };
+}
 
 describe("getCanonicalHost", () => {
-  const snapshot: Record<string, string | undefined> = {};
-
-  afterEach(() => {
-    for (const key of KEYS) {
-      delete process.env[key];
-      if (snapshot[key] !== undefined) process.env[key] = snapshot[key];
-    }
-  });
-
-  function capture() {
-    for (const key of KEYS) snapshot[key] = process.env[key];
-  }
+  const { capture } = useSnapshot();
 
   it("returns the AUTH_URL hostname", () => {
     capture();
@@ -147,18 +60,7 @@ describe("getCanonicalHost", () => {
 });
 
 describe("isAllowedHost", () => {
-  const snapshot: Record<string, string | undefined> = {};
-
-  afterEach(() => {
-    for (const key of KEYS) {
-      delete process.env[key];
-      if (snapshot[key] !== undefined) process.env[key] = snapshot[key];
-    }
-  });
-
-  function capture() {
-    for (const key of KEYS) snapshot[key] = process.env[key];
-  }
+  const { capture } = useSnapshot();
 
   it("allows the canonical host", () => {
     capture();
@@ -171,7 +73,7 @@ describe("isAllowedHost", () => {
 
   it("allows VERCEL_URL", () => {
     capture();
-    delete process.env.AUTH_URL;
+    process.env.AUTH_URL = "https://ocd.goodman.tw";
     delete process.env.NEXTAUTH_URL;
     process.env.VERCEL_URL = "ocd-abc123.vercel.app";
 
@@ -180,7 +82,7 @@ describe("isAllowedHost", () => {
 
   it("allows *.vercel.app", () => {
     capture();
-    delete process.env.AUTH_URL;
+    process.env.AUTH_URL = "https://ocd.goodman.tw";
     delete process.env.NEXTAUTH_URL;
     delete process.env.VERCEL_URL;
 
@@ -189,7 +91,7 @@ describe("isAllowedHost", () => {
 
   it("allows loopback hosts", () => {
     capture();
-    delete process.env.AUTH_URL;
+    process.env.AUTH_URL = "https://ocd.goodman.tw";
     delete process.env.NEXTAUTH_URL;
     delete process.env.VERCEL_URL;
 
@@ -200,20 +102,43 @@ describe("isAllowedHost", () => {
   // IPv6 loopback allowlisted (impl checks ::1 before :port strip).
   it("allows IPv6 loopback ::1", () => {
     capture();
-    delete process.env.AUTH_URL;
+    process.env.AUTH_URL = "https://ocd.goodman.tw";
     delete process.env.NEXTAUTH_URL;
     delete process.env.VERCEL_URL;
 
     expect(isAllowedHost("::1")).toBe(true);
   });
 
-  it("rejects external and empty hosts", () => {
+  it("rejects external and empty hosts when canonical is set", () => {
     capture();
     process.env.AUTH_URL = "https://ocd.goodman.tw";
     delete process.env.NEXTAUTH_URL;
     delete process.env.VERCEL_URL;
 
     expect(isAllowedHost("evil.com")).toBe(false);
+    expect(isAllowedHost("")).toBe(false);
+    expect(isAllowedHost(null)).toBe(false);
+    expect(isAllowedHost(undefined)).toBe(false);
+  });
+
+  it("allows any non-empty host when canonical is null (AUTH_URL unset)", () => {
+    capture();
+    delete process.env.AUTH_URL;
+    delete process.env.NEXTAUTH_URL;
+    delete process.env.VERCEL_URL;
+
+    expect(getCanonicalHost()).toBeNull();
+    expect(isAllowedHost("ocd.goodman.tw")).toBe(true);
+    expect(isAllowedHost("evil.com")).toBe(true);
+    expect(isAllowedHost("preview-xyz.vercel.app")).toBe(true);
+  });
+
+  it("still rejects empty hosts when canonical is null", () => {
+    capture();
+    delete process.env.AUTH_URL;
+    delete process.env.NEXTAUTH_URL;
+    delete process.env.VERCEL_URL;
+
     expect(isAllowedHost("")).toBe(false);
     expect(isAllowedHost(null)).toBe(false);
     expect(isAllowedHost(undefined)).toBe(false);
