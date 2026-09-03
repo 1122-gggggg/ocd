@@ -88,6 +88,12 @@ export default async function LoginPage({
         {params.error === "rate-limited" && (
           <p role="alert" className="alert alert-error">登入嘗試過於頻繁，請稍後再試。</p>
         )}
+        {params.error === "OAuthAccountNotLinked" && (
+          <p role="alert" className="alert alert-error">此 Google 帳號的 Email 已用密碼註冊過，請先用密碼登入（之後可綁定），或換一個 Google 帳號。</p>
+        )}
+        {params.error && !["invalid", "rate-limited", "OAuthAccountNotLinked"].includes(params.error) && (
+          <p role="alert" className="alert alert-error">登入時發生問題（{params.error}），請再試一次或聯絡管理員。</p>
+        )}
 
         <form action={loginAction} className="space-y-4">
           <input type="hidden" name="callbackUrl" value={callbackUrl} />
