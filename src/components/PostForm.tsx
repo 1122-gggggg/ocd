@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { containsCrisisKeyword } from "@/lib/crisis-keywords";
 
@@ -46,6 +47,7 @@ export function PostForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const router = useRouter();
   const confirmRef = useRef<HTMLButtonElement | null>(null);
 
   // Move focus into the crisis dialog and restore it on close, so keyboard
@@ -78,7 +80,16 @@ export function PostForm({
         setPending(false);
         return;
       }
-      // A successful action redirects, which throws NEXT_REDIRECT below.
+      // Success ({ok:true} / void): redirecting actions throw NEXT_REDIRECT
+      // below; non-redirect actions (reply/update) land here — clear the
+      // composer and refresh revalidated content.
+      setPending(false);
+      setTitle("");
+      setBody("");
+      setChecked(false);
+      formRef.current?.reset();
+      router.refresh();
+      return;
     } catch (err: unknown) {
       if (isRedirectError(err)) throw err;
       setError(err instanceof Error ? err.message : String(err));

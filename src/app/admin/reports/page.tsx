@@ -120,19 +120,30 @@ export default async function AdminReportsPage({
                   <form action={moderateContent as unknown as string} className="flex gap-2">
                     <input type="hidden" name="targetType" value={r.targetType} />
                     <input type="hidden" name="targetId" value={r.targetId} />
-                    <button name="action" value="DELETE" type="submit" className="btn btn-danger btn-sm">
+                    <input type="hidden" name="action" value="DELETE" />
+                    <button type="submit" className="btn btn-danger btn-sm">
                       刪除內容
                     </button>
-                    <button name="action" value="RESTORE" type="submit" className="btn btn-secondary btn-sm">
+                  </form>
+                  <form action={moderateContent as unknown as string} className="flex gap-2">
+                    <input type="hidden" name="targetType" value={r.targetType} />
+                    <input type="hidden" name="targetId" value={r.targetId} />
+                    <input type="hidden" name="action" value="RESTORE" />
+                    <button type="submit" className="btn btn-secondary btn-sm">
                       恢復內容
                     </button>
                   </form>
                   <form action={resolveReport as unknown as string} className="flex gap-2">
                     <input type="hidden" name="id" value={r.id} />
-                    <button name="status" value="RESOLVED" type="submit" className="btn btn-primary btn-sm">
+                    <input type="hidden" name="status" value="RESOLVED" />
+                    <button type="submit" className="btn btn-primary btn-sm">
                       結案
                     </button>
-                    <button name="status" value="DISMISSED" type="submit" className="btn btn-secondary btn-sm">
+                  </form>
+                  <form action={resolveReport as unknown as string} className="flex gap-2">
+                    <input type="hidden" name="id" value={r.id} />
+                    <input type="hidden" name="status" value="DISMISSED" />
+                    <button type="submit" className="btn btn-secondary btn-sm">
                       駁回舉報
                     </button>
                   </form>

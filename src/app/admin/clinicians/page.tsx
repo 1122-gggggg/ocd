@@ -157,24 +157,41 @@ export default async function AdminCliniciansPage({
                     <span className="text-xs text-subtle">{formatDateTime(a.createdAt)}</span>
                   </div>
 
-                  <form
-                    action={reviewClinicianApplication as unknown as string}
-                    className="flex flex-wrap gap-2 border-t border-line pt-3"
-                  >
-                    <input type="hidden" name="id" value={a.id} />
-                    <input
-                      name="reviewNote"
-                      placeholder="審核備註（可空）"
-                      aria-label="審核備註"
-                      className="input flex-1 min-w-[12rem]"
-                    />
-                    <button name="status" value="APPROVED" type="submit" className="btn btn-primary">
-                      核准
-                    </button>
-                    <button name="status" value="REJECTED" type="submit" className="btn btn-secondary">
-                      駁回
-                    </button>
-                  </form>
+                  {/* 審核備註兩份 textarea 分屬兩個 form：原 UI 為單一 textarea＋雙按鈕（依賴 submitter name/value，實證缺失而靜默 no-op），此處接受兩份同步問題，行為對等。 */}
+                  <div className="space-y-2 border-t border-line pt-3">
+                    <form
+                      action={reviewClinicianApplication as unknown as string}
+                      className="flex flex-wrap gap-2"
+                    >
+                      <input type="hidden" name="id" value={a.id} />
+                      <input type="hidden" name="status" value="APPROVED" />
+                      <input
+                        name="reviewNote"
+                        placeholder="審核備註（可空）"
+                        aria-label="審核備註"
+                        className="input flex-1 min-w-[12rem]"
+                      />
+                      <button type="submit" className="btn btn-primary">
+                        核准
+                      </button>
+                    </form>
+                    <form
+                      action={reviewClinicianApplication as unknown as string}
+                      className="flex flex-wrap gap-2"
+                    >
+                      <input type="hidden" name="id" value={a.id} />
+                      <input type="hidden" name="status" value="REJECTED" />
+                      <input
+                        name="reviewNote"
+                        placeholder="審核備註（可空）"
+                        aria-label="審核備註"
+                        className="input flex-1 min-w-[12rem]"
+                      />
+                      <button type="submit" className="btn btn-secondary">
+                        駁回
+                      </button>
+                    </form>
+                  </div>
                 </li>
               );
             })}
