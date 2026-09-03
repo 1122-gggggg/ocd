@@ -32,4 +32,8 @@ jobs:
         run: npm test
 
       - name: Prisma schema check (DB-less)
+        env:
+          # validate never connects; it only needs the vars defined
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+          DIRECT_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
         run: npx prisma validate
