@@ -1,5 +1,4 @@
 {
-  "//": "migrate-in-build: Vercel has no pre-start hook, so `prisma migrate deploy` runs in buildCommand to ensure the Neon (ap-northeast-1 Tokyo) schema is current before the new deployment serves traffic. Regions hnd1 keeps serverless functions next to Neon Tokyo.",
   "framework": "nextjs",
   "regions": ["hnd1"],
   "buildCommand": "npx prisma generate && npx prisma migrate deploy && npm run build",
