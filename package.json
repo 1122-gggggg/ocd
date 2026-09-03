@@ -3,14 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20.0.0"
+    "node": "20.x",
+    "npm": "10.x"
   },
+  "packageManager": "npm@10.9.2",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:ci": "vitest run --coverage",
     "db:seed": "npx prisma db seed",
     "postinstall": "prisma generate || true",
     "load:k6": "k6 run k6/load.js",

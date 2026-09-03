@@ -3,6 +3,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ocd
+      # DEV-ONLY insecure default: local compose credentials only, never production.
       POSTGRES_PASSWORD: ocd
       POSTGRES_DB: ocd
     volumes:
@@ -25,16 +26,19 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-      - /app/.next
     environment:
       DATABASE_URL: postgresql://ocd:ocd@db:5432/ocd?schema=public
       DIRECT_URL: postgresql://ocd:ocd@db:5432/ocd?schema=public
+      # DEV-ONLY insecure default: local dev only, never commit real secrets.
       AUTH_SECRET: dev-insecure-auth-secret-min-32-chars-ok
       AUTH_URL: http://localhost:3001
       AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID-}
       AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET-}
+      # DEV-ONLY insecure default: local dev admin seed password only.
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme-admin}
-    command: sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts && npm run dev -- --hostname 0.0.0.0 --port 3000"
+      # Set SEED_ON_BOOT=1 to run prisma/seed.ts on `docker compose up`. Default: skip seed.
+      SEED_ON_BOOT: ${SEED_ON_BOOT-}
+    command: sh -c 'npx prisma migrate deploy && if [ "$$SEED_ON_BOOT" = "1" ]; then npx tsx prisma/seed.ts; fi && npm run dev -- --hostname 0.0.0.0 --port 3000'
 
 volumes:
   pgdata:

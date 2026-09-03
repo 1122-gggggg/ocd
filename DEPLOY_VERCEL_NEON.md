@@ -87,6 +87,7 @@ curl -s -D - https://ocd.yourdomain.tw/b/newcomers/new | grep -q "location: /log
   3. **手動 / CI**：`scripts/backup/neon-to-r2.sh` 走 `DIRECT_URL` + `pg_dump --no-owner | gzip | aws s3 cp`，輸出到 `backups/neon-YYYYMMDD.sql.gz`。這是完整的 SQL dump，還原度最高，但 `pg_dump` / `aws` 在 Vercel serverless 裡不存在，所以只能在本機或 CI 跑。兩者副檔名不同，不會互相覆蓋。
 
   驗證每日備份有在跑：Vercel → Logs 搜 `cron/backup: uploaded`，或到 R2 看 `backups/` 有沒有當天的 `logical-*.json.gz`。
+  保留：Neon PITR (Free) 只留 7 天；R2 上的 `logical-*.json.gz` (每日自動) 與 `neon-*.sql.gz` (手動/CI) 無自動刪除、會一直累積，空間不足時手動刪舊檔 (兩者副檔名不同、不會互蓋)。
 - **升級**: Vercel Hobby 100GB 頻寬足 500人，爆了再 `Vercel Pro $20`，Neon 自動 scale 不需手動
 - **上傳**: 已切 `R2` (`src/lib/r2.ts` + `R2_*` 環境變數)。`uploads/clinician-proof` 不再寫本地磁碟 (Vercel 無持久磁碟)，改由 `S3Client` 上傳至 `R2_BUCKET` (預設 `ocd-proofs`)，`proofPath` 存 R2 URL/key。
 - **日誌**: Vercel → Logs, Neon → Monitoring
@@ -95,13 +96,19 @@ curl -s -D - https://ocd.yourdomain.tw/b/newcomers/new | grep -q "location: /log
 ## 7. 一鍵指令 (已配好)
 
 ```bash
-# 本地模擬 Vercel 建置
-npm run build            # 已含 prisma generate
+# 本地模擬 Vercel 建置 (順序同 vercel.json buildCommand;
+# 注意: `npm run build` 本身只是 `next build`，prisma generate 是由 buildCommand 帶起的)
+npx prisma generate
 npx prisma migrate deploy
+npm run build
+# 首次部署後再寫入版區與管理員 (需 SEED_ADMIN_PASSWORD):
 npx prisma db seed
 
 # 檢查
-npx vitest run           # 16 tests
+npm test                # vitest run (單元測試)
+npm run typecheck       # tsc --noEmit
+npm run lint            # eslint . --max-warnings=0
+npx prisma validate     # DB-less schema 檢查
 ```
 
 ## 常見坑

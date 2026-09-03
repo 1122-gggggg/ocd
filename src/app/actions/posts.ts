@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { canCreatePost, canReply } from "@/lib/permissions";
 import { containsCrisisKeyword } from "@/lib/crisis-keywords";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
 export async function createPost(
@@ -37,7 +37,7 @@ export async function createPost(
   if (containsCrisisKeyword(bodyMd) && confirmCrisis !== "1") {
     return { ok: false, code: "CRISIS_CONFIRM", message: "請確認已閱讀求助資源" };
   }
-  const board = await prisma.board.findUnique({ where: { slug: boardSlug } });
+  const board = await prisma.board.findUnique({ where: { slug: boardSlug }, select: { id: true, status: true, slug: true } });
   if (!board) return { ok: false, code: "BOARD_NOT_FOUND" };
   const can = canCreatePost(
     user as unknown as Parameters<typeof canCreatePost>[0],
@@ -56,6 +56,7 @@ export async function createPost(
   });
   revalidatePath(`/b/${boardSlug}`);
   revalidatePath(`/b/${boardSlug}/p/${post.id}`);
+  revalidateTag("boards-home");
   redirect(`/b/${boardSlug}/p/${post.id}`);
 }
 
@@ -139,6 +140,7 @@ export async function createReply(
         { isolationLevel: "Serializable" }
       );
       revalidatePath(`/b/${post.board.slug}/p/${postId}`);
+      revalidateTag("boards-home");
       return { ok: true };
     } catch (e: unknown) {
       if (isPrismaP2002(e) && attempt < 2) {
@@ -174,6 +176,7 @@ export async function updatePost(
   await prisma.post.update({ where: { id: postId }, data: { title, bodyMd } });
   revalidatePath(`/b/${post.board.slug}/p/${postId}`);
   revalidatePath(`/b/${post.board.slug}`);
+  revalidateTag("boards-home");
   return { ok: true };
 }
 
@@ -199,6 +202,7 @@ export async function deletePost(
   });
   revalidatePath(`/b/${post.board.slug}/p/${postId}`);
   revalidatePath(`/b/${post.board.slug}`);
+  revalidateTag("boards-home");
   return { ok: true };
 }
 
@@ -228,6 +232,7 @@ export async function updateReply(
   if (!bodyMd || bodyMd.length > 20000) return { ok: false, code: "INVALID_BODY", message: "正文 1-20000 字" };
   await prisma.reply.update({ where: { id: replyId }, data: { bodyMd } });
   revalidatePath(`/b/${reply.post.board.slug}/p/${reply.postId}`);
+  revalidateTag("boards-home");
   return { ok: true };
 }
 
@@ -258,5 +263,6 @@ export async function deleteReply(
     data: { deletedAt: new Date(), deletedById: user.id },
   });
   revalidatePath(`/b/${reply.post.board.slug}/p/${reply.postId}`);
+  revalidateTag("boards-home");
   return { ok: true };
 }

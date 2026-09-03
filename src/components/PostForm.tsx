@@ -1,8 +1,13 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { containsCrisisKeyword } from "@/lib/crisis-keywords";
-import { Markdown } from "@/lib/markdown";
+
+const MarkdownPreview = dynamic(() => import("@/components/MarkdownPreview"), {
+  ssr: false,
+  loading: () => <p className="hint">載入預覽中⋯</p>,
+});
 
 const TITLE_MAX = 80;
 const BODY_MAX = 20000;
@@ -186,13 +191,12 @@ export function PostForm({
             {preview ? "隱藏預覽" : "預覽"}
           </button>
         </div>
-
         {preview && (
           <div className="card p-4 space-y-2">
             <div className="text-xs font-medium text-subtle">預覽</div>
             {!isReply && title && <div className="text-lg font-bold">{title}</div>}
             <div className="prose prose-sm">
-              <Markdown>{body || "*（尚無內容）*"}</Markdown>
+              <MarkdownPreview content={body || "*（尚無內容）*"} />
             </div>
           </div>
         )}

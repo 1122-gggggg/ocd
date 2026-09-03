@@ -26,9 +26,9 @@ export async function createBoardApplication(formData: FormData) {
   if (!description || description.length > 500) return { ok: false, code: "INVALID_DESC" };
   if (!rationale || rationale.length > 2000) return { ok: false, code: "INVALID_RATIONALE" };
 
-  const existsBoard = await prisma.board.findUnique({ where: { slug } });
+  const existsBoard = await prisma.board.findUnique({ where: { slug }, select: { id: true } });
   if (existsBoard) return { ok: false, code: "SLUG_TAKEN", message: "slug 已被版區使用" };
-  const existsPending = await prisma.boardApplication.findFirst({ where: { slug, status: "PENDING" } });
+  const existsPending = await prisma.boardApplication.findFirst({ where: { slug, status: "PENDING" }, select: { id: true } });
   if (existsPending) return { ok: false, code: "SLUG_TAKEN", message: "slug 已有待審申請" };
 
   await prisma.boardApplication.create({
@@ -36,12 +36,13 @@ export async function createBoardApplication(formData: FormData) {
       proposerId: session.user.id,
       name,
       slug,
-      group: group as any,
+      group: group as "SYMPTOM" | "TREATMENT" | "COMMUNITY",
       description,
       rationale,
     },
   });
   revalidatePath("/admin/applications");
+  revalidateTag("boards-home");
   redirect("/boards/apply?ok=1");
 }
 
@@ -53,12 +54,12 @@ export async function reviewBoardApplication(formData: FormData) {
   const reviewNote = String(formData.get("reviewNote") ?? "").trim() || null;
 
   if (!["APPROVED", "REJECTED"].includes(status)) return { ok: false, code: "INVALID_STATUS" };
-  const app = await prisma.boardApplication.findUnique({ where: { id } });
+  const app = await prisma.boardApplication.findUnique({ where: { id }, select: { id: true, slug: true, name: true, description: true, group: true } });
   if (!app) return { ok: false, code: "NOT_FOUND" };
   await prisma.$transaction(async (tx) => {
     await tx.boardApplication.update({
       where: { id },
-      data: { status: status as any, reviewNote },
+      data: { status: status as "APPROVED" | "REJECTED", reviewNote },
     });
     if (status === "APPROVED") {
       const disclaimer =
@@ -88,10 +89,11 @@ export async function updateOfficialMd(formData: FormData) {
   const slug = String(formData.get("slug") ?? "");
   const officialMd = String(formData.get("officialMd") ?? "");
   if (officialMd.length > 20000) return { ok: false, code: "TOO_LONG" };
-  const board = await prisma.board.findUnique({ where: { slug } });
+  const board = await prisma.board.findUnique({ where: { slug }, select: { id: true } });
   if (!board) return { ok: false, code: "NOT_FOUND" };
   await prisma.board.update({ where: { slug }, data: { officialMd } });
   revalidatePath(`/b/${slug}`);
   revalidatePath("/admin/boards");
+  revalidateTag("boards-home");
   return { ok: true };
 }

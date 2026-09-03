@@ -97,14 +97,16 @@ model Account {
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
-
 model Session {
   id           String   @id @default(cuid())
   sessionToken String   @unique
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model VerificationToken {
@@ -125,6 +127,8 @@ model Board {
   officialMd  String      @db.Text
   createdAt   DateTime    @default(now())
   posts       Post[]
+
+  @@index([status, slug])
 }
 
 model BoardApplication {
@@ -140,7 +144,9 @@ model BoardApplication {
   reviewNote  String?           @db.Text
   createdAt   DateTime          @default(now())
 
-  @@index([status])
+  @@index([status, createdAt])
+  @@index([slug, status])
+  @@index([proposerId])
 }
 
 model ClinicianApplication {
@@ -156,7 +162,7 @@ model ClinicianApplication {
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
-  @@index([status])
+  @@index([status, createdAt])
 }
 
 model Post {
@@ -177,6 +183,7 @@ model Post {
   @@index([boardId, deletedAt, createdAt])
   @@index([boardId, createdAt])
   @@index([authorId])
+  @@index([deletedById])
 }
 
 model Reply {
@@ -196,7 +203,9 @@ model Reply {
 
   @@unique([postId, floor])
   @@index([postId, createdAt])
+  @@index([postId, deletedAt, floor])
   @@index([authorId])
+  @@index([deletedById])
 }
 
 model Report {
@@ -212,4 +221,6 @@ model Report {
 
   @@unique([reporterId, targetType, targetId])
   @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@index([reporterId])
 }

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
 import { Markdown } from "@/lib/markdown";
@@ -27,16 +28,40 @@ function parsePage(value: string | string[] | undefined): number {
   return n;
 }
 
+// Shared with PostPage via React cache(): metadata + page issue a single
+// post query per request (no extra query from generateMetadata).
+const getPost = cache(async (id: string) =>
+  prisma.post.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      boardId: true,
+      authorId: true,
+      title: true,
+      bodyMd: true,
+      isAnonymous: true,
+      createdAt: true,
+      updatedAt: true,
+      deletedAt: true,
+      author: { select: authorSelect },
+    },
+  })
+);
+
+const getBoard = cache(async (slug: string) =>
+  prisma.board.findUnique({
+    where: { slug },
+    select: { id: true, slug: true, name: true, status: true },
+  })
+);
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const post = await prisma.post.findUnique({
-    where: { id },
-    select: { title: true, deletedAt: true },
-  });
+  const post = await getPost(id);
   if (!post || post.deletedAt) return { title: "文章不存在" };
   return { title: post.title };
 }
@@ -52,54 +77,45 @@ export default async function PostPage({
   const sp = await searchParams;
   const requestedPage = parsePage(sp?.page);
 
-  const board = await prisma.board.findUnique({ where: { slug } });
+  // Round 1: board + post + session in parallel (1 sequential DB round).
+  const [board, post, session] = await Promise.all([
+    getBoard(slug),
+    getPost(id),
+    auth() as unknown as Promise<{
+      user?: { id: string; role: string; clinicianStatus: string; nickname?: string };
+    } | null>,
+  ]);
   if (!board) notFound();
-
-  const post = await prisma.post.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      boardId: true,
-      authorId: true,
-      title: true,
-      bodyMd: true,
-      isAnonymous: true,
-      createdAt: true,
-      updatedAt: true,
-      deletedAt: true,
-      author: { select: authorSelect },
-      board: { select: { id: true, slug: true, name: true, group: true, status: true } },
-    },
-  });
   if (!post || post.boardId !== board.id) notFound();
 
-  const session = (await auth()) as unknown as {
-    user?: { id: string; role: string; clinicianStatus: string; nickname?: string };
-  } | null;
   const viewer = session?.user ?? null;
 
-  const totalReplies = await prisma.reply.count({ where: { postId: id } });
+  // Round 2: reply count + list in parallel; soft-deleted excluded from both
+  // so counts match the listed pages. Skip uses requestedPage; Pagination
+  // display still clamps to totalPages below.
+  const [totalReplies, replies] = await Promise.all([
+    prisma.reply.count({ where: { postId: id, deletedAt: null } }),
+    prisma.reply.findMany({
+      where: { postId: id, deletedAt: null },
+      orderBy: { floor: "asc" },
+      skip: (requestedPage - 1) * REPLY_PAGE_SIZE,
+      take: REPLY_PAGE_SIZE,
+      select: {
+        id: true,
+        postId: true,
+        authorId: true,
+        floor: true,
+        replyToFloor: true,
+        bodyMd: true,
+        isAnonymous: true,
+        createdAt: true,
+        deletedAt: true,
+        author: { select: authorSelect },
+      },
+    }),
+  ]);
   const totalPages = Math.max(1, Math.ceil(totalReplies / REPLY_PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
-
-  const replies = await prisma.reply.findMany({
-    where: { postId: id },
-    orderBy: { floor: "asc" },
-    skip: (currentPage - 1) * REPLY_PAGE_SIZE,
-    take: REPLY_PAGE_SIZE,
-    select: {
-      id: true,
-      postId: true,
-      authorId: true,
-      floor: true,
-      replyToFloor: true,
-      bodyMd: true,
-      isAnonymous: true,
-      createdAt: true,
-      deletedAt: true,
-      author: { select: authorSelect },
-    },
-  });
 
   const isAdmin = viewer?.role === "ADMIN";
   const isDeleted = !!post.deletedAt;

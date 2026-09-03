@@ -67,7 +67,7 @@ export function setup() {
   return {};
 }
 
-export default function () {
+export default function load() {
   const slug = randomSlug();
 
   group('GET /', () => {

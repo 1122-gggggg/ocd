@@ -16,7 +16,8 @@ export default function DisclaimerPage() {
       <div className="alert alert-error">
         <span aria-hidden="true">⚠</span>
         <span>
-          若你或身邊的人有<strong>立即危險</strong>，請立即撥打 <strong>119</strong>
+          若你或身邊的人有<strong>立即危險</strong>，請立即撥打{" "}
+          <a href="tel:119" className="underline underline-offset-2 font-medium">119</a>
           ，或前往最近的急診。
         </span>
       </div>
@@ -47,7 +48,8 @@ export default function DisclaimerPage() {
           <li className="alert alert-info">
             <span aria-hidden="true">☎</span>
             <span>
-              衛生福利部安心專線 <strong>1925</strong>（24 小時免費）
+              衛生福利部安心專線{" "}
+              <a href="tel:1925" className="underline underline-offset-2 font-medium">1925</a>（24 小時免費）
             </span>
           </li>
           <li className="alert">
@@ -63,7 +65,7 @@ export default function DisclaimerPage() {
           </li>
           <li className="alert">
             <span aria-hidden="true">💬</span>
-            <span>各縣市生命線（1995）、張老師專線（1980）</span>
+            <span>各縣市生命線（<a href="tel:1995" className="underline underline-offset-2">1995</a>）、張老師專線（<a href="tel:1980" className="underline underline-offset-2">1980</a>）</span>
           </li>
         </ul>
       </section>

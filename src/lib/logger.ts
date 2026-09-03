@@ -38,8 +38,53 @@ function mergedContext(fields?: RequestContext): RequestContext {
 }
 
 // ---------------------------------------------------------------------------
-// Core formatter
+// PII redaction — logs must never print emails / hashes / tokens.
 // ---------------------------------------------------------------------------
+
+const REDACTED = "[REDACTED]";
+
+const SENSITIVE_KEYS: Record<string, true> = {
+  email: true,
+  passwordhash: true,
+  token: true,
+  secret: true,
+  authorization: true,
+  cookie: true,
+};
+
+const SENSITIVE_SUBSTRINGS = [
+  "email",
+  "password",
+  "token",
+  "secret",
+  "authoriz",
+  "cookie",
+  "setcookie",
+];
+
+/** Case-insensitive match: exact key or substring (covers refresh_token, etc.). */
+function isSensitiveKey(key: string): boolean {
+  const n = key.toLowerCase().replace(/[_-]/g, "");
+  if (SENSITIVE_KEYS[n]) return true;
+  for (const s of SENSITIVE_SUBSTRINGS) {
+    if (n.includes(s)) return true;
+  }
+  return false;
+}
+
+/** Deep-clone `value`, replacing sensitive keys with [REDACTED]. */
+function redact(value: unknown, depth = 0): unknown {
+  if (depth > 8) return value;
+  if (Array.isArray(value)) return value.map((v) => redact(v, depth + 1));
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = isSensitiveKey(k) ? REDACTED : redact(v, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
 
 export type LogFields = RequestContext & Record<string, unknown>;
 
@@ -65,7 +110,7 @@ function format(
     message,
     ...(finalRequestId ? { requestId: finalRequestId } : {}),
     ...(finalUserId ? { userId: finalUserId } : {}),
-    ...rest,
+    ...((redact(rest) as Record<string, unknown> | null) ?? {}),
   };
 
   // Remove duplicate requestId/userId from rest if they leaked

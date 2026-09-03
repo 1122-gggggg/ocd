@@ -46,19 +46,25 @@ const withSession = auth((req) => {
 });
 
 export default function middleware(req: NextRequest, event: NextFetchEvent) {
-  // Optional middleware rate limit for POST routes (per-IP, per-instance best-effort)
-  // 60 req / 60s window. Returns 429 before session/auth logic to shed load early.
+  // POST rate limits (per-IP, per-instance best-effort), checked before
+  // session/auth logic to shed load early. Auth routes get a tighter budget
+  // to slow credential brute-force: 10 req / 60s; other POSTs 60 req / 60s.
   if (req.method === "POST") {
     const ip = getClientIp(req.headers);
-    if (!checkRateLimit(`mw:POST:${ip}`, 60, 60_000)) {
+    const isAuthRoute = req.nextUrl.pathname.startsWith("/api/auth");
+    const limit = isAuthRoute ? 10 : 60;
+    const key = isAuthRoute ? `mw:auth:POST:${ip}` : `mw:POST:${ip}`;
+    if (!checkRateLimit(key, limit, 60_000)) {
       return new NextResponse("Too Many Requests", {
         status: 429,
         headers: { "Retry-After": "60" },
       });
     }
   }
-  // Clear stale AUTH_URL before Auth.js rewrites the request origin.
-  preferRequestHost();
+  // Drop a stale AUTH_URL only when it mismatches this request's host.
+  preferRequestHost(
+    req.headers.get("x-forwarded-host") ?? req.headers.get("host"),
+  );
   return (withSession as unknown as NextMiddleware)(req, event);
 }
 
@@ -66,6 +72,7 @@ export const config = {
   matcher: [
     "/admin/:path*",
     "/onboarding",
+    "/api/auth/:path*",
     "/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.).*)",
   ],
 };

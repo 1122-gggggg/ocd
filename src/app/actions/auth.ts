@@ -31,7 +31,7 @@ export async function registerUser(formData: FormData) {
     const hdrs = await headers();
     const ip = getClientIp(hdrs);
     if (!checkRateLimit(`register:${ip}`, 5, 60 * 60 * 1000)) {
-      return { ok: false, code: "RATE_LIMITED", message: "註冊過於頻繁，請稍後再試" };
+      redirect("/register?err=rate");
     }
   } catch {
     // headers() may fail in some contexts (tests); fail open for availability,
@@ -45,12 +45,12 @@ export async function registerUser(formData: FormData) {
   };
   const parsed = registerSchema.safeParse(raw);
   if (!parsed.success) {
-    return { ok: false, code: "INVALID_INPUT", message: parsed.error.issues[0]?.message };
+    redirect("/register?err=invalid");
   }
   const { email, password, nickname, memberType } = parsed.data;
 
   const existsEmail = await prisma.user.findUnique({ where: { email } });
-  if (existsEmail) return { ok: false, code: "EMAIL_TAKEN", message: "Email 已被使用" };
+  if (existsEmail) redirect("/register?err=taken");
 
   const hash = await bcrypt.hash(password, 12);
   await prisma.user.create({
@@ -75,6 +75,47 @@ export async function registerUser(formData: FormData) {
   }
   revalidatePath("/");
   redirect("/");
+}
+// Login throttle: 5 attempts / 15 min per IP + email bucket. Mirrors the
+// inline check in "@/app/login/page" — keep the key scheme and limits in sync.
+const LOGIN_LIMIT = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+const INVALID_CREDENTIALS_MESSAGE = "帳號或密碼錯誤，請再試一次。";
+
+/**
+ * Credentials login with fail-closed per-IP + per-email throttling.
+ * Unknown email, wrong password, and missing fields all return the same
+ * INVALID_CREDENTIALS message so callers cannot enumerate accounts.
+ */
+export async function loginUser(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  // Throttle BEFORE any credential check; deny when the limiter errors.
+  try {
+    const hdrs = await headers();
+    const ip = getClientIp(hdrs);
+    if (!checkRateLimit(`login:${ip}:${email || "unknown"}`, LOGIN_LIMIT, LOGIN_WINDOW_MS)) {
+      return { ok: false, code: "RATE_LIMITED", message: "登入嘗試過於頻繁，請稍後再試" };
+    }
+  } catch {
+    return { ok: false, code: "RATE_LIMITED", message: "登入嘗試過於頻繁，請稍後再試" };
+  }
+  if (!email || !password) {
+    return { ok: false, code: "INVALID_CREDENTIALS", message: INVALID_CREDENTIALS_MESSAGE };
+  }
+  try {
+    await signIn("credentials", { email, password, redirect: false });
+    return { ok: true, code: "OK" };
+  } catch (e: unknown) {
+    const err = e as { type?: string };
+    // Unknown email and wrong password both surface as CredentialsSignin —
+    // keep the uniform message so accounts cannot be enumerated.
+    if (err?.type === "CredentialsSignin") {
+      return { ok: false, code: "INVALID_CREDENTIALS", message: INVALID_CREDENTIALS_MESSAGE };
+    }
+    throw e;
+  }
 }
 
 export async function completeOnboarding(formData: FormData) {

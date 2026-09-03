@@ -13,12 +13,43 @@ const notoSansTC = Noto_Sans_TC({
   display: "swap",
 });
 
+// 正式網址：AUTH_URL（未設定時退回正式網域）。metadataBase 讓 OG／canonical 相對路徑轉為絕對網址。
+const siteUrl =
+  process.env.AUTH_URL && process.env.AUTH_URL.trim() !== ""
+    ? process.env.AUTH_URL
+    : "https://ocd.goodman.tw";
+
+// 社群圖示待辦：日後新增 src/app/icon.tsx 與 src/app/opengraph-image.tsx；
+// 本檔僅引用「/icon」與「/opengraph-image」路徑，不在此建立圖檔。
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: "強迫症互助坊",
     template: "%s｜強迫症互助坊",
   },
   description: "病友、家屬與臨床工作者的經驗交流與支持空間",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "強迫症互助坊",
+    locale: "zh_Hant",
+    url: "/",
+    title: "強迫症互助坊",
+    description: "病友、家屬與臨床工作者的經驗交流與支持空間",
+    images: ["/opengraph-image"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "強迫症互助坊",
+    description: "病友、家屬與臨床工作者的經驗交流與支持空間",
+    images: ["/opengraph-image"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export const viewport: Viewport = {
@@ -57,8 +88,8 @@ function Footer() {
         <div className="alert alert-info">
           <span aria-hidden="true">☎</span>
           <span>
-            如果你現在很不好受：衛生福利部安心專線 <strong>1925</strong>（24 小時免費）。
-            立即危險請撥 <strong>119</strong> 或前往最近的急診。
+            如果你現在很不好受：衛生福利部安心專線 <a href="tel:1925" className="underline underline-offset-2 font-medium">1925</a>（24 小時免費）。
+            立即危險請撥 <a href="tel:119" className="underline underline-offset-2 font-medium">119</a> 或前往最近的急診。
           </span>
         </div>
 

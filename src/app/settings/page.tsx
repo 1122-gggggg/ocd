@@ -54,10 +54,14 @@ export default async function SettingsPage({
         </div>
       </header>
 
-      {params.ok === "nickname" && <p className="alert alert-success">暱稱已更新。</p>}
-      {params.err === "empty" && <p className="alert alert-error">暱稱不能是空白。</p>}
+      {params.ok === "nickname" && (
+        <p role="status" className="alert alert-success">暱稱已更新。</p>
+      )}
+      {params.err === "empty" && (
+        <p role="alert" className="alert alert-error">暱稱不能是空白。</p>
+      )}
       {params.err === "long" && (
-        <p className="alert alert-error">暱稱超過 {NICKNAME_MAX} 字的儲存上限。</p>
+        <p role="alert" className="alert alert-error">暱稱超過 {NICKNAME_MAX} 字的儲存上限。</p>
       )}
 
       {/* Nickname — freely editable */}

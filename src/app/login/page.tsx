@@ -1,9 +1,27 @@
 import { signIn } from "@/auth";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const metadata: Metadata = { title: "登入" };
+// Login throttle: 5 attempts / 15 min per IP + email bucket. Mirrors loginUser
+// in "@/app/actions/auth" — keep the key scheme and limits in sync.
+const LOGIN_LIMIT = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Same-origin callback guard. Only absolute paths stay on-site;
+ * protocol-relative ("//evil") and backslash-equivalent ("/\\evil")
+ * payloads fall back to "/".
+ */
+function getSafeCallbackUrl(value: unknown): string {
+  if (typeof value !== "string") return "/";
+  if (!value.startsWith("/")) return "/";
+  if (value.startsWith("//") || value.startsWith("/\\")) return "/";
+  return value;
+}
 
 export default async function LoginPage({
   searchParams,
@@ -11,14 +29,29 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }) {
   const params = await searchParams;
-  const callbackUrl = params.callbackUrl ?? "/";
+  const callbackUrl = getSafeCallbackUrl(params.callbackUrl);
   const hasGoogle = !!process.env.AUTH_GOOGLE_ID;
 
   async function loginAction(formData: FormData) {
     "use server";
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
-    const cb = String(formData.get("callbackUrl") ?? "/");
+    const cb = getSafeCallbackUrl(formData.get("callbackUrl"));
+    // Fail-closed throttle: deny when the limiter (or headers) errors.
+    let allowed = false;
+    try {
+      const ip = getClientIp(await headers());
+      allowed = checkRateLimit(
+        `login:${ip}:${email.trim().toLowerCase() || "unknown"}`,
+        LOGIN_LIMIT,
+        LOGIN_WINDOW_MS,
+      );
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) {
+      redirect(`/login?error=rate-limited&callbackUrl=${encodeURIComponent(cb)}`);
+    }
     try {
       await signIn("credentials", {
         email,
@@ -50,7 +83,10 @@ export default async function LoginPage({
         </header>
 
         {params.error === "invalid" && (
-          <p className="alert alert-error">帳號或密碼錯誤，請再試一次。</p>
+          <p role="alert" className="alert alert-error">帳號或密碼錯誤，請再試一次。</p>
+        )}
+        {params.error === "rate-limited" && (
+          <p role="alert" className="alert alert-error">登入嘗試過於頻繁，請稍後再試。</p>
         )}
 
         <form action={loginAction} className="space-y-4">

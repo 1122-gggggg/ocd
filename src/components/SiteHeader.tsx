@@ -26,6 +26,11 @@ export function SiteHeader({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const drawerPanelRef = useRef<HTMLDivElement | null>(null);
+  const userButtonRef = useRef<HTMLButtonElement | null>(null);
+  const groupButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Any navigation closes every transient surface.
   useEffect(() => {
@@ -57,14 +62,57 @@ export function SiteHeader({
   }, []);
 
   // The drawer covers the viewport; keep the page behind it from scrolling.
+  // On open, move focus into the drawer panel and trap Tab inside it;
+  // on close, restore focus to the element that had it before.
   useEffect(() => {
     if (!drawerOpen) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = drawerPanelRef.current;
+    const firstLink = panel?.querySelector<HTMLElement>("a[href], button:not([disabled])");
+    (firstLink ?? panel)?.focus({ preventScroll: true });
+    function trapTab(e: KeyboardEvent) {
+      if (e.key !== "Tab" || !drawerPanelRef.current) return;
+      const items = Array.from(
+        drawerPanelRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null);
+      if (items.length === 0) {
+        e.preventDefault();
+        drawerPanelRef.current.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", trapTab);
     return () => {
       document.body.style.overflow = prev;
+      document.removeEventListener("keydown", trapTab);
+      previouslyFocused?.focus?.({ preventScroll: true });
     };
   }, [drawerOpen]);
+
+  function focusFirstMenuItem(key: string) {
+    menuRefs.current[key]
+      ?.querySelector<HTMLElement>('[role="menuitem"]')
+      ?.focus();
+  }
+
+  function closeGroupAndRefocus(key: string) {
+    setOpenGroup(null);
+    groupButtonRefs.current[key]?.focus();
+  }
 
   const grouped = GROUP_ORDER.map((g) => ({
     key: g,
@@ -79,11 +127,12 @@ export function SiteHeader({
       <div ref={navRef} className="container-page flex h-14 items-center gap-3">
         {/* Mobile menu trigger */}
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => setDrawerOpen((v) => !v)}
           aria-expanded={drawerOpen}
           aria-controls="mobile-nav"
-          aria-label="開啟版區選單"
+          aria-label={drawerOpen ? "關閉版區選單" : "開啟版區選單"}
           className="btn btn-ghost btn-sm md:hidden -ml-2"
         >
           <MenuIcon open={drawerOpen} />
@@ -103,10 +152,24 @@ export function SiteHeader({
           {grouped.map((g) => (
             <div key={g.key} className="relative">
               <button
+                ref={(el) => {
+                  groupButtonRefs.current[g.key] = el;
+                }}
                 type="button"
+                id={`board-menu-button-${g.key}`}
                 onClick={() => setOpenGroup((cur) => (cur === g.key ? null : g.key))}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    if (openGroup !== g.key) setOpenGroup(g.key);
+                    requestAnimationFrame(() => focusFirstMenuItem(g.key));
+                  } else if (e.key === "Escape") {
+                    setOpenGroup(null);
+                  }
+                }}
                 aria-expanded={openGroup === g.key}
-                aria-haspopup="true"
+                aria-haspopup="menu"
+                aria-controls={`board-menu-${g.key}`}
                 className={`btn btn-ghost btn-sm ${
                   openGroup === g.key ? "text-fg bg-surface-3" : ""
                 }`}
@@ -116,6 +179,29 @@ export function SiteHeader({
               </button>
               {openGroup === g.key && (
                 <div
+                  ref={(el) => {
+                    menuRefs.current[g.key] = el;
+                  }}
+                  role="menu"
+                  id={`board-menu-${g.key}`}
+                  aria-labelledby={`board-menu-button-${g.key}`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      closeGroupAndRefocus(g.key);
+                    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                      e.preventDefault();
+                      const items = Array.from(
+                        menuRefs.current[g.key]?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+                      );
+                      const i = items.indexOf(document.activeElement as HTMLElement);
+                      const next =
+                        e.key === "ArrowDown"
+                          ? items[(i + 1) % items.length]
+                          : items[(i - 1 + items.length) % items.length];
+                      next?.focus();
+                    }
+                  }}
                   className="absolute left-0 top-full mt-1 min-w-[13rem] card p-1.5 fade-in"
                   style={{ boxShadow: "var(--shadow-pop)" }}
                 >
@@ -123,6 +209,7 @@ export function SiteHeader({
                     <Link
                       key={b.slug}
                       href={`/b/${b.slug}`}
+                      role="menuitem"
                       className={`block rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-surface-3 ${
                         isActive(b.slug) ? "text-accent font-medium bg-accent-soft" : "text-fg"
                       }`}
@@ -143,10 +230,24 @@ export function SiteHeader({
           {user ? (
             <div className="relative">
               <button
+                ref={userButtonRef}
                 type="button"
+                id="user-menu-button"
                 onClick={() => setUserMenuOpen((v) => !v)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    if (!userMenuOpen) setUserMenuOpen(true);
+                    requestAnimationFrame(() => {
+                      document.querySelector<HTMLElement>('#user-menu [role="menuitem"]')?.focus();
+                    });
+                  } else if (e.key === "Escape") {
+                    setUserMenuOpen(false);
+                  }
+                }}
                 aria-expanded={userMenuOpen}
-                aria-haspopup="true"
+                aria-haspopup="menu"
+                aria-controls="user-menu"
                 className="btn btn-ghost btn-sm gap-2 max-w-[12rem]"
               >
                 <Avatar name={user.nickname} size="sm" />
@@ -155,6 +256,27 @@ export function SiteHeader({
               </button>
               {userMenuOpen && (
                 <div
+                  role="menu"
+                  id="user-menu"
+                  aria-labelledby="user-menu-button"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setUserMenuOpen(false);
+                      userButtonRef.current?.focus();
+                    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                      e.preventDefault();
+                      const items = Array.from(
+                        document.querySelectorAll<HTMLElement>('#user-menu [role="menuitem"]'),
+                      );
+                      const i = items.indexOf(document.activeElement as HTMLElement);
+                      const next =
+                        e.key === "ArrowDown"
+                          ? items[(i + 1) % items.length]
+                          : items[(i - 1 + items.length) % items.length];
+                      next?.focus();
+                    }
+                  }}
                   className="absolute right-0 top-full mt-1 min-w-[12rem] card p-1.5 fade-in"
                   style={{ boxShadow: "var(--shadow-pop)" }}
                 >
@@ -169,6 +291,7 @@ export function SiteHeader({
                   <form action={signOutAction} className="mt-1 border-t border-line pt-1">
                     <button
                       type="submit"
+                      role="menuitem"
                       className="w-full text-left rounded-md px-3 py-1.5 text-sm text-danger hover:bg-danger-soft transition-colors"
                     >
                       登出
@@ -200,7 +323,12 @@ export function SiteHeader({
             className="fixed inset-0 top-14 z-30 bg-black/30"
           />
           <div
+            ref={drawerPanelRef}
             id="mobile-nav"
+            role="dialog"
+            aria-modal="true"
+            aria-label="版區選單"
+            tabIndex={-1}
             className="absolute inset-x-0 top-full z-40 max-h-[70vh] overflow-y-auto border-b border-line bg-surface shadow-lg fade-in"
           >
             <div className="container-page py-4 space-y-4">
@@ -239,11 +367,11 @@ export function SiteHeader({
     </header>
   );
 }
-
 function MenuLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link
       href={href}
+      role="menuitem"
       className="block rounded-md px-3 py-1.5 text-sm text-fg hover:bg-surface-3 transition-colors"
     >
       {children}

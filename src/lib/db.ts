@@ -17,7 +17,6 @@ if (
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var prisma: PrismaClient | undefined;
 }
 
@@ -32,9 +31,8 @@ export const prisma: PrismaClient = globalThis.prisma ?? createPrismaClient();
 // Always cache on globalThis to avoid exhausting connections in serverless / hot-reload
 if (!globalThis.prisma) globalThis.prisma = prisma;
 
-// Gracefully handle initial connection errors (don't crash on import)
-prisma.$connect().catch((e) => {
-  console.error("[prisma] $connect failed:", e);
-});
-
+// NOTE: lazy-connect by design — PrismaClient connects on first query.
+// Do NOT call prisma.$connect() on import: it opens a connection in every
+// serverless cold-start / build-time import and exhausts the pool.
 export default prisma;
+

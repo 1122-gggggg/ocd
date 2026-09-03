@@ -8,6 +8,7 @@ import { S3Client } from "@aws-sdk/client-s3";
  * - R2_ACCESS_KEY_ID     R2 API token access key
  * - R2_SECRET_ACCESS_KEY R2 API token secret
  * - R2_BUCKET            bucket name (default: "ocd-proofs")
+ * - R2_BACKUP_BUCKET     (optional) backup bucket; falls back to R2_BUCKET
  *
  * r2Enabled is true only when all three credentials are present; when false,
  * `r2` is null and callers should fall back or return 503.
@@ -19,6 +20,10 @@ export const r2Enabled =
   !!process.env.R2_SECRET_ACCESS_KEY;
 
 export const R2_BUCKET = process.env.R2_BUCKET || "ocd-proofs";
+
+// Optional backup isolation: set R2_BACKUP_BUCKET to store nightly logical
+// backups apart from user-uploaded proofs; defaults to R2_BUCKET.
+export const R2_BACKUP_BUCKET = process.env.R2_BACKUP_BUCKET || R2_BUCKET;
 
 export const r2 = r2Enabled
   ? new S3Client({

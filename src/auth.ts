@@ -34,6 +34,11 @@ const adapter = {
   },
 };
 
+// Stand-in hash so authorize() runs exactly one bcrypt.compare even for
+// unknown emails (constant-time fail, no user-enumeration timing oracle).
+const DUMMY_PASSWORD_HASH =
+  "$2b$10$57aFuTsSK8XwllZ4l5ZdWORSnbKTMaZjcdyzZo/Wt5aWtYNeuY0li";
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter,
@@ -49,9 +54,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = String(credentials.email).toLowerCase().trim();
         const password = String(credentials.password);
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.passwordHash) return null;
-        const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return null;
+        // Constant-time fail: always run one bcrypt.compare (dummy hash when
+        // the user is missing) so unknown emails are not faster to reject
+        // than wrong passwords (no user-enumeration timing oracle).
+        const ok = await bcrypt.compare(
+          password,
+          user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+        );
+        if (!user?.passwordHash || !ok) return null;
         return {
           id: user.id,
           email: user.email,
@@ -62,7 +72,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ...(googleConfigured
       ? [
           Google({
-            allowDangerousEmailAccountLinking: true,
+            // Verified-email-only linking: a Google account may link to an
+            // existing user solely when Google reports the email verified.
+            allowDangerousEmailAccountLinking: false,
           }),
         ]
       : []),
@@ -74,6 +86,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const isEdge = process.env.NEXT_RUNTIME === "edge";
       const now = Date.now();
 
+      // Full-claim cache stays at 60s; privilege claims (role / memberType /
+      // clinicianStatus) refresh on a shorter 30s window so revocations and
+      // clinician approvals propagate faster without re-reading the DB per request.
+      const FULL_STALE_MS = 60_000;
+      const PRIVILEGE_STALE_MS = 30_000;
+      const t = token as Record<string, unknown>;
+      const lastNumber = (key: string): number =>
+        typeof t[key] === "number" ? (t[key] as number) : 0;
+
       const populate = (dbUser: {
         id: string;
         role: string;
@@ -83,16 +104,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         profileComplete: boolean;
         email: string | null;
       }) => {
-        (token as Record<string, unknown>).id = dbUser.id;
-        (token as Record<string, unknown>).role = dbUser.role;
-        (token as Record<string, unknown>).memberType = dbUser.memberType;
-        (token as Record<string, unknown>).clinicianStatus =
-          dbUser.clinicianStatus;
-        (token as Record<string, unknown>).nickname = dbUser.nickname;
-        (token as Record<string, unknown>).profileComplete =
-          dbUser.profileComplete;
-        (token as Record<string, unknown>).email = dbUser.email;
-        (token as Record<string, unknown>).lastVerified = now;
+        t.id = dbUser.id;
+        t.role = dbUser.role;
+        t.memberType = dbUser.memberType;
+        t.clinicianStatus = dbUser.clinicianStatus;
+        t.nickname = dbUser.nickname;
+        t.profileComplete = dbUser.profileComplete;
+        t.email = dbUser.email;
+        t.lastVerified = now;
+        t.lastPrivilegeVerified = now;
+      };
+
+      const populatePrivileges = (dbUser: {
+        role: string;
+        memberType: string;
+        clinicianStatus: string;
+      }) => {
+        t.role = dbUser.role;
+        t.memberType = dbUser.memberType;
+        t.clinicianStatus = dbUser.clinicianStatus;
+        t.lastPrivilegeVerified = now;
       };
 
       try {
@@ -135,29 +166,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return token;
         }
 
-        // (2) Subsequent requests: token.id present -> only refetch if stale >60s or trigger==='update'
+        // (2) Subsequent requests: token.id present -> full refetch if stale
+        // >60s or trigger==='update'; privilege-only refetch if >30s stale.
         if (token?.id) {
           if (isEdge) return token;
-          const lastVerified =
-            typeof (token as Record<string, unknown>).lastVerified === "number"
-              ? ((token as Record<string, unknown>).lastVerified as number)
-              : 0;
-          const isStale = now - lastVerified > 60_000;
-          const shouldRefresh = isStale || trigger === "update";
-          if (!shouldRefresh) {
+          const lastVerified = lastNumber("lastVerified");
+          const lastPrivilegeVerified =
+            lastNumber("lastPrivilegeVerified") || lastVerified;
+          if (now - lastVerified > FULL_STALE_MS || trigger === "update") {
+            try {
+              const dbUser = await prisma.user.findUnique({
+                where: { id: token.id as string },
+              });
+              if (dbUser) {
+                populate(dbUser);
+              } else {
+                t.lastVerified = now;
+                t.lastPrivilegeVerified = now;
+              }
+            } catch {
+              // keep token
+            }
             return token;
           }
-          try {
-            const dbUser = await prisma.user.findUnique({
-              where: { id: token.id as string },
-            });
-            if (dbUser) {
-              populate(dbUser);
-            } else {
-              (token as Record<string, unknown>).lastVerified = now;
+          if (now - lastPrivilegeVerified > PRIVILEGE_STALE_MS) {
+            try {
+              const dbUser = await prisma.user.findUnique({
+                where: { id: token.id as string },
+                select: {
+                  role: true,
+                  memberType: true,
+                  clinicianStatus: true,
+                },
+              });
+              if (dbUser) {
+                populatePrivileges(dbUser);
+              } else {
+                t.lastPrivilegeVerified = now;
+              }
+            } catch {
+              // keep token
             }
-          } catch {
-            // keep token
           }
           return token;
         }

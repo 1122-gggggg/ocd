@@ -3,8 +3,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { revalidatePath, revalidateTag } from "next/cache";
 export async function createReport(formData: FormData) {
   const session = await auth() as unknown as { user?: { id: string } } | null;
   if (!session?.user?.id) return { ok: false, code: "UNAUTHORIZED" };
@@ -22,11 +21,11 @@ export async function createReport(formData: FormData) {
   // Check cannot report self and existence
   let authorId: string | null = null;
   if (targetType === "POST") {
-    const post = await prisma.post.findUnique({ where: { id: targetId } });
+    const post = await prisma.post.findUnique({ where: { id: targetId }, select: { authorId: true } });
     if (!post) return { ok: false, code: "NOT_FOUND" };
     authorId = post.authorId;
   } else {
-    const reply = await prisma.reply.findUnique({ where: { id: targetId } });
+    const reply = await prisma.reply.findUnique({ where: { id: targetId }, select: { authorId: true } });
     if (!reply) return { ok: false, code: "NOT_FOUND" };
     authorId = reply.authorId;
   }
@@ -36,7 +35,7 @@ export async function createReport(formData: FormData) {
     where: {
       reporterId_targetType_targetId: {
         reporterId: session.user.id,
-        targetType: targetType as any,
+        targetType: targetType as "POST" | "REPLY",
         targetId,
       },
     },
@@ -46,12 +45,13 @@ export async function createReport(formData: FormData) {
   await prisma.report.create({
     data: {
       reporterId: session.user.id,
-      targetType: targetType as any,
+      targetType: targetType as "POST" | "REPLY",
       targetId,
       reason,
     },
   });
   revalidatePath("/admin/reports");
+  revalidateTag("boards-home");
   return { ok: true };
 }
 
@@ -63,8 +63,16 @@ export async function moderateContent(formData: FormData) {
   const action = String(formData.get("action") ?? "");
 
   if (!["DELETE", "RESTORE"].includes(action)) return { ok: false, code: "INVALID_ACTION" };
-
+  let boardSlug: string | null = null;
+  let moderatedPostId: string | null = null;
   if (targetType === "POST") {
+    const post = await prisma.post.findUnique({
+      where: { id: targetId },
+      select: { id: true, board: { select: { slug: true } } },
+    });
+    if (!post) return { ok: false, code: "NOT_FOUND" };
+    boardSlug = post.board.slug;
+    moderatedPostId = post.id;
     if (action === "DELETE") {
       await prisma.post.update({
         where: { id: targetId },
@@ -77,6 +85,13 @@ export async function moderateContent(formData: FormData) {
       });
     }
   } else if (targetType === "REPLY") {
+    const reply = await prisma.reply.findUnique({
+      where: { id: targetId },
+      select: { id: true, postId: true, post: { select: { board: { select: { slug: true } } } } },
+    });
+    if (!reply) return { ok: false, code: "NOT_FOUND" };
+    boardSlug = reply.post.board.slug;
+    moderatedPostId = reply.postId;
     if (action === "DELETE") {
       await prisma.reply.update({
         where: { id: targetId },
@@ -92,6 +107,11 @@ export async function moderateContent(formData: FormData) {
     return { ok: false, code: "INVALID_TARGET" };
   }
   revalidatePath("/admin/reports");
+  if (boardSlug && moderatedPostId) {
+    revalidatePath(`/b/${boardSlug}`);
+    revalidatePath(`/b/${boardSlug}/p/${moderatedPostId}`);
+  }
+  revalidateTag("boards-home");
   return { ok: true };
 }
 
@@ -103,8 +123,9 @@ export async function resolveReport(formData: FormData) {
   if (!["RESOLVED", "DISMISSED"].includes(status)) return { ok: false, code: "INVALID_STATUS" };
   await prisma.report.update({
     where: { id },
-    data: { status: status as any, resolvedAt: new Date() },
+    data: { status: status as "RESOLVED" | "DISMISSED", resolvedAt: new Date() },
   });
   revalidatePath("/admin/reports");
+  revalidateTag("boards-home");
   return { ok: true };
 }

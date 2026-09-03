@@ -1,8 +1,8 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
-import { r2, r2Enabled, R2_BUCKET } from "@/lib/r2";
+import { r2, r2Enabled, R2_BACKUP_BUCKET } from "@/lib/r2";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -37,16 +37,45 @@ function isAuthorized(request: Request): boolean {
   if (!header.startsWith(prefix)) return false;
 
   const provided = header.slice(prefix.length);
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  // timingSafeEqual throws on length mismatch, so compare lengths first.
-  if (a.length !== b.length) return false;
+  if (!provided) return false;
+  // Compare SHA-256 digests (fixed 32 bytes) so timingSafeEqual never throws
+  // and response timing reveals nothing about the secret's length.
+  const a = createHash("sha256").update(provided, "utf8").digest();
+  const b = createHash("sha256").update(expected, "utf8").digest();
   return timingSafeEqual(a, b);
+}
+
+/** Page size for chunked table dumps — bounds memory on large tables. */
+const BACKUP_PAGE_SIZE = 1000;
+
+/** Dump every row of a table in id-ordered cursor pages (full fields kept). */
+async function dumpAll<T extends { id: string }>(
+  query: (args: {
+    take: number;
+    skip?: number;
+    cursor?: { id: string };
+    orderBy: { id: "asc" };
+  }) => Promise<T[]>,
+): Promise<T[]> {
+  const out: T[] = [];
+  let cursor: { id: string } | undefined;
+  for (;;) {
+    const page = await query(
+      cursor
+        ? { take: BACKUP_PAGE_SIZE, skip: 1, cursor, orderBy: { id: "asc" } }
+        : { take: BACKUP_PAGE_SIZE, orderBy: { id: "asc" } },
+    );
+    out.push(...page);
+    if (page.length < BACKUP_PAGE_SIZE) break;
+    cursor = { id: page[page.length - 1]!.id };
+  }
+  return out;
 }
 
 function backupKey(now: Date): string {
   const stamp = now.toISOString().slice(0, 10).replace(/-/g, "");
-  return `backups/logical-${stamp}.json.gz`;
+  const suffix = randomBytes(4).toString("hex");
+  return `backups/logical-${stamp}-${suffix}.json.gz`;
 }
 
 export async function GET(request: Request) {
@@ -88,14 +117,14 @@ export async function GET(request: Request) {
       replies,
       reports,
     ] = await Promise.all([
-      prisma.user.findMany(),
-      prisma.account.findMany(),
-      prisma.board.findMany(),
-      prisma.boardApplication.findMany(),
-      prisma.clinicianApplication.findMany(),
-      prisma.post.findMany(),
-      prisma.reply.findMany(),
-      prisma.report.findMany(),
+      dumpAll((args) => prisma.user.findMany(args)),
+      dumpAll((args) => prisma.account.findMany(args)),
+      dumpAll((args) => prisma.board.findMany(args)),
+      dumpAll((args) => prisma.boardApplication.findMany(args)),
+      dumpAll((args) => prisma.clinicianApplication.findMany(args)),
+      dumpAll((args) => prisma.post.findMany(args)),
+      dumpAll((args) => prisma.reply.findMany(args)),
+      dumpAll((args) => prisma.report.findMany(args)),
     ]);
 
     const now = new Date();
@@ -132,7 +161,7 @@ export async function GET(request: Request) {
 
     await r2.send(
       new PutObjectCommand({
-        Bucket: R2_BUCKET,
+        Bucket: R2_BACKUP_BUCKET,
         Key: key,
         Body: body,
         ContentType: "application/json",

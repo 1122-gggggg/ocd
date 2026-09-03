@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
 import { Markdown } from "@/lib/markdown";
@@ -24,16 +25,30 @@ function parsePage(value: string | string[] | undefined): number {
   return n;
 }
 
+// Shared with BoardPage via React cache(): metadata + page issue a single
+// board query per request (no extra query from generateMetadata).
+const getBoard = cache(async (slug: string) =>
+  prisma.board.findUnique({
+    where: { slug },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      status: true,
+      description: true,
+      group: true,
+      officialMd: true,
+    },
+  })
+);
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const board = await prisma.board.findUnique({
-    where: { slug },
-    select: { name: true, description: true },
-  });
+  const board = await getBoard(slug);
   if (!board) return { title: "版區不存在" };
   return { title: board.name, description: board.description };
 }
@@ -49,38 +64,43 @@ export default async function BoardPage({
   const sp = await searchParams;
   const requestedPage = parsePage(sp?.page);
 
-  const board = await prisma.board.findUnique({ where: { slug } });
+  // Round 1: board + session in parallel.
+  const [board, session] = await Promise.all([
+    getBoard(slug),
+    auth() as unknown as Promise<{
+      user?: { id: string; role: string; clinicianStatus: string; nickname?: string };
+    } | null>,
+  ]);
   if (!board || board.status !== "ACTIVE") notFound();
-
-  const session = (await auth()) as unknown as {
-    user?: { id: string; role: string; clinicianStatus: string; nickname?: string };
-  } | null;
 
   const viewer = session?.user ?? null;
 
   const canPost = canCreatePost(viewer, { status: board.status, slug: board.slug });
 
-  const total = await prisma.post.count({
-    where: { boardId: board.id, deletedAt: null },
-  });
+  // Round 2: count + list in parallel (skip uses requestedPage; Pagination
+  // display still clamps to totalPages below).
+  const [total, posts] = await Promise.all([
+    prisma.post.count({
+      where: { boardId: board.id, deletedAt: null },
+    }),
+    prisma.post.findMany({
+      where: { boardId: board.id, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      skip: (requestedPage - 1) * BOARD_PAGE_SIZE,
+      take: BOARD_PAGE_SIZE,
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        isAnonymous: true,
+        authorId: true,
+        author: { select: authorSelect },
+        _count: { select: { replies: { where: { deletedAt: null } } } },
+      },
+    }),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / BOARD_PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
-
-  const posts = await prisma.post.findMany({
-    where: { boardId: board.id, deletedAt: null },
-    orderBy: { createdAt: "desc" },
-    skip: (currentPage - 1) * BOARD_PAGE_SIZE,
-    take: BOARD_PAGE_SIZE,
-    select: {
-      id: true,
-      title: true,
-      createdAt: true,
-      isAnonymous: true,
-      authorId: true,
-      author: { select: authorSelect },
-      _count: { select: { replies: true } },
-    },
-  });
 
   const postAction = canPost ? (
     <Link href={`/b/${slug}/new`} className="btn btn-primary">

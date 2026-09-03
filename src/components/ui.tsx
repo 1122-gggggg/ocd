@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { formatDateTime, formatRelative, initialOf } from "@/lib/format";
 
@@ -84,7 +87,7 @@ export function PageHeader({
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0 space-y-1">
         {eyebrow && <div className="text-xs font-medium text-accent">{eyebrow}</div>}
-        <h1 className="text-2xl font-bold tracking-tight name-clip">{title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight name-clip" title={title}>{title}</h1>
         {description && (
           <div className="text-sm text-muted leading-relaxed">{description}</div>
         )}
@@ -137,27 +140,116 @@ export function Pagination({
       aria-label="分頁"
     >
       {hasPrev ? (
-        <Link href={hrefFor(currentPage - 1)} className="btn btn-secondary btn-sm" rel="prev">
+        <Link href={hrefFor(currentPage - 1)} className="btn btn-secondary btn-sm btn-touch" rel="prev">
           ← 上一頁
         </Link>
       ) : (
-        <span className="btn btn-secondary btn-sm" aria-disabled="true" style={{ opacity: 0.45 }}>
+        <button type="button" disabled className="btn btn-secondary btn-sm btn-touch">
           ← 上一頁
-        </span>
+        </button>
       )}
       <span className="text-xs text-muted tabular-nums">
         第 {currentPage} / {totalPages} 頁{summary ? `・${summary}` : ""}
       </span>
       {hasNext ? (
-        <Link href={hrefFor(currentPage + 1)} className="btn btn-secondary btn-sm" rel="next">
+        <Link href={hrefFor(currentPage + 1)} className="btn btn-secondary btn-sm btn-touch" rel="next">
           下一頁 →
         </Link>
       ) : (
-        <span className="btn btn-secondary btn-sm" aria-disabled="true" style={{ opacity: 0.45 }}>
+        <button type="button" disabled className="btn btn-secondary btn-sm btn-touch">
           下一頁 →
-        </span>
+        </button>
       )}
     </nav>
+  );
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────── */
+
+export function Breadcrumbs({
+  items,
+  label = "麵包屑",
+}: {
+  items: { label: string; href?: string }[];
+  label?: string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <nav aria-label={label} className="text-xs text-subtle">
+      <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        {items.map((item, i) => {
+          const last = i === items.length - 1;
+          return (
+            // Static trail: position is a stable key.
+            <li key={`${i}-${item.label}`} className="flex min-w-0 items-center gap-1.5">
+              {i > 0 && (
+                <span aria-hidden="true" className="select-none">
+                  /
+                </span>
+              )}
+              {last || !item.href ? (
+                <span aria-current="page" className="text-muted">
+                  {item.label}
+                </span>
+              ) : (
+                <Link href={item.href} className="hover:text-accent">
+                  {item.label}
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+/* ── Password input with show/hide toggle ────────────────────── */
+
+export function PasswordInput({
+  id,
+  name,
+  autoComplete = "current-password",
+  required,
+  minLength,
+  placeholder,
+  invalid = false,
+  describedBy,
+}: {
+  id: string;
+  name: string;
+  autoComplete?: string;
+  required?: boolean;
+  minLength?: number;
+  placeholder?: string;
+  invalid?: boolean;
+  describedBy?: string;
+}) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="flex gap-2">
+      <input
+        id={id}
+        name={name}
+        type={shown ? "text" : "password"}
+        autoComplete={autoComplete}
+        required={required}
+        minLength={minLength}
+        placeholder={placeholder}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+        className="input min-w-0 flex-1"
+      />
+      <button
+        type="button"
+        aria-pressed={shown}
+        aria-controls={id}
+        onClick={() => setShown((v) => !v)}
+        className="btn btn-secondary btn-touch shrink-0"
+      >
+        {shown ? "隱藏" : "顯示"}
+      </button>
+    </div>
   );
 }
 

@@ -10,6 +10,8 @@ const GROUP_BLURB: Record<string, string> = {
   COMMUNITY: "日常、家屬視角與臨床工作者的交流空間。",
 };
 
+// 首頁版區列表經 getCachedHomeBoards 快取 30s（tag: boards-home，見 src/lib/cache.ts）；
+// 最新文章僅取 createdAt + title，且 _count 已排除軟刪除（deletedAt: null）。
 export default async function HomePage() {
   const [boards, session] = await Promise.all([getCachedHomeBoards(), auth()]);
   const signedIn = !!(session as { user?: unknown } | null)?.user;

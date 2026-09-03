@@ -182,7 +182,17 @@ const boards: BoardSeed[] = [
 ];
 
 async function main() {
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD || "changeme-admin";
+  // Fail closed: never seed a weak/default admin password into any database.
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (
+    !adminPassword ||
+    adminPassword === "changeme-admin" ||
+    adminPassword.length < 12
+  ) {
+    throw new Error(
+      "SEED_ADMIN_PASSWORD 未設定或過於脆弱：請設定至少 12 個字元的強密碼後再執行 seed（拒絕預設值 changeme-admin）。",
+    );
+  }
   const hash = await bcrypt.hash(adminPassword, 12);
 
   const admin = await prisma.user.upsert({
@@ -202,15 +212,15 @@ async function main() {
       memberType: "PATIENT",
     },
   });
-
   for (const b of boards) {
+    // Idempotent: officialMd is seed-only content — never overwrite it once
+    // an admin has edited the board in production.
     await prisma.board.upsert({
       where: { slug: b.slug },
       update: {
         name: b.name,
         description: b.description,
         group: b.group,
-        officialMd: b.officialMd,
         status: "ACTIVE",
       },
       create: {
