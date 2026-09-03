@@ -22,6 +22,9 @@ export const runtime = "nodejs";
  *
  * Session and VerificationToken are deliberately excluded: sessions are JWTs
  * (see auth.config.ts) so those rows are ephemeral and worthless to restore.
+ * The same goes for PasswordResetToken, EmailVerificationToken and
+ * RateLimitCounter — all short-lived, and restoring a reset-token hash from a
+ * backup would revive a credential the member already used or abandoned.
  *
  * The dump contains emails and bcrypt password hashes — everything a real
  * backup needs to restore accounts. Keep the R2 bucket private.
@@ -104,7 +107,13 @@ export async function GET(request: Request) {
         format: "ocd-logical-backup",
         version: 1,
         takenAt: now.toISOString(),
-        excludes: ["Session", "VerificationToken"],
+        excludes: [
+          "Session",
+          "VerificationToken",
+          "PasswordResetToken",
+          "EmailVerificationToken",
+          "RateLimitCounter",
+        ],
       },
       users,
       accounts,

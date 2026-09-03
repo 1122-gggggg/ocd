@@ -8,7 +8,13 @@ export const metadata: Metadata = { title: "登入" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
+  searchParams: Promise<{
+    callbackUrl?: string;
+    error?: string;
+    reset?: string;
+    pwchanged?: string;
+    verify?: string;
+  }>;
 }) {
   const params = await searchParams;
   const callbackUrl = params.callbackUrl ?? "/";
@@ -52,6 +58,12 @@ export default async function LoginPage({
         {params.error === "invalid" && (
           <p className="alert alert-error">帳號或密碼錯誤，請再試一次。</p>
         )}
+        {params.reset === "1" && (
+          <p className="alert alert-success">密碼已重設，請用新密碼登入。</p>
+        )}
+        {params.pwchanged === "1" && (
+          <p className="alert alert-success">密碼已變更，請重新登入。</p>
+        )}
 
         <form action={loginAction} className="space-y-4">
           <input type="hidden" name="callbackUrl" value={callbackUrl} />
@@ -81,7 +93,14 @@ export default async function LoginPage({
               required
               className="input"
             />
-            <p className="hint">目前未設定郵件服務，忘記密碼請聯絡管理員重設。</p>
+            <p className="hint">
+              <Link
+                href="/forgot-password"
+                className="text-accent underline underline-offset-2"
+              >
+                忘記密碼？
+              </Link>
+            </p>
           </div>
           <button type="submit" className="btn btn-primary btn-block btn-lg">
             登入

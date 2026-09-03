@@ -2,13 +2,15 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit } from "@/lib/rate-limit-db";
+import { notifyNewReport } from "@/lib/notify";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 export async function createReport(formData: FormData) {
   const session = await auth() as unknown as { user?: { id: string } } | null;
   if (!session?.user?.id) return { ok: false, code: "UNAUTHORIZED" };
-  if (!checkRateLimit(`createReport:${session.user.id}`, 5, 60_000)) {
+  const gate = await enforceRateLimit(`createReport:${session.user.id}`, 5, 60_000);
+  if (!gate.allowed) {
     return { ok: false, code: "RATE_LIMITED", message: "舉報過於頻繁，請稍後再試" };
   }
   const targetType = String(formData.get("targetType") ?? "") as "POST" | "REPLY";
@@ -43,14 +45,21 @@ export async function createReport(formData: FormData) {
   });
   if (exists) return { ok: false, code: "ALREADY_REPORTED", message: "已舉報過" };
 
-  await prisma.report.create({
+  const report = await prisma.report.create({
     data: {
       reporterId: session.user.id,
       targetType: targetType as any,
       targetId,
       reason,
     },
+    select: { id: true },
   });
+
+  // Push the alert out now rather than waiting for an admin to open the queue.
+  // notifyNewReport never throws: a mail or webhook outage must not make a
+  // successfully filed report look like a failure to the reporter.
+  await notifyNewReport(report.id);
+
   revalidatePath("/admin/reports");
   return { ok: true };
 }

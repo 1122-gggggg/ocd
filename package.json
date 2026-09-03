@@ -14,7 +14,9 @@
     "db:seed": "npx prisma db seed",
     "postinstall": "prisma generate || true",
     "load:k6": "k6 run k6/load.js",
-    "load:artillery": "artillery run artillery.yml"
+    "load:artillery": "artillery run artillery.yml",
+    "admin:password": "npx tsx scripts/set-admin-password.ts",
+    "smoke": "npx tsx scripts/smoke-e2e.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"

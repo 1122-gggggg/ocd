@@ -56,18 +56,18 @@ enum ReportStatus {
 }
 
 model User {
-  id                   String                @id @default(cuid())
+  id                   String                   @id @default(cuid())
   name                 String?
-  email                String?               @unique
+  email                String?                  @unique
   emailVerified        DateTime?
   image                String?
   passwordHash         String?
   /// Free-form display name: any text, any length, duplicates allowed.
   nickname             String
-  profileComplete      Boolean               @default(false)
-  role                 UserRole              @default(USER)
-  memberType           MemberType            @default(PATIENT)
-  clinicianStatus      ClinicianStatus       @default(NONE)
+  profileComplete      Boolean                  @default(false)
+  role                 UserRole                 @default(USER)
+  memberType           MemberType               @default(PATIENT)
+  clinicianStatus      ClinicianStatus          @default(NONE)
   accounts             Account[]
   sessions             Session[]
   posts                Post[]
@@ -75,8 +75,17 @@ model User {
   boardApplications    BoardApplication[]
   clinicianApplication ClinicianApplication?
   reports              Report[]
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  passwordResets       PasswordResetToken[]
+  emailVerifications   EmailVerificationToken[]
+  /// Any JWT minted before this instant is refused on its next refresh. Set on
+  /// password reset / change so a stolen session dies with the old password.
+  sessionsInvalidBefore   DateTime?
+  /// True only for the built-in tombstone account that inherits content from
+  /// deleted users who chose to keep their posts. Cannot log in (no password,
+  /// no linked OAuth account) and is filtered out of member-facing listings.
+  isSystem             Boolean                  @default(false)
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
 
   @@index([nickname])
 }
@@ -209,7 +218,56 @@ model Report {
   status     ReportStatus @default(OPEN)
   createdAt  DateTime     @default(now())
   resolvedAt DateTime?
+  /// Set once an admin alert (email and/or webhook) has gone out for this
+  /// report, so the digest job never notifies twice for the same row.
+  notifiedAt DateTime?
 
   @@unique([reporterId, targetType, targetId])
   @@index([status, createdAt])
+  @@index([notifiedAt])
+}
+
+/// Single-use password reset grant. Only the SHA-256 of the token is stored,
+/// so a database leak cannot be replayed against the reset endpoint.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Single-use email ownership proof. `email` records the address the token was
+/// issued for, so changing the address invalidates a token already in flight.
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Fixed-window counter shared by every serverless instance. `id` is
+/// "<bucket>:<windowStart epoch ms>", so a single atomic upsert both creates
+/// and increments the window. Expired rows are swept by the nightly cron.
+model RateLimitCounter {
+  id          String   @id
+  bucket      String
+  windowStart DateTime
+  count       Int      @default(1)
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+  @@index([bucket])
 }

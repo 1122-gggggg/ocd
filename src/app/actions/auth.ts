@@ -1,14 +1,18 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { signIn, auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/rate-limit";
+import { enforceRateLimit } from "@/lib/rate-limit-db";
 import { NICKNAME_MAX, normalizeNickname } from "@/lib/nickname";
+import { hashPassword } from "@/lib/password";
+import { PASSWORD_MIN, validatePassword } from "@/lib/password-policy";
+import { issueEmailVerification } from "@/lib/email-verification";
+import { logger } from "@/lib/logger";
 
 // A "use server" module may only export async functions, so the nickname rules
 // live in @/lib/nickname and are re-used by both the actions and the UI.
@@ -20,22 +24,24 @@ const nicknameSchema = z
 
 const registerSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8, "密碼至少 8 字"),
+  password: z.string().min(PASSWORD_MIN, `密碼至少 ${PASSWORD_MIN} 字`),
   nickname: nicknameSchema,
   memberType: z.enum(["PATIENT", "FAMILY", "CLINICIAN"]),
 });
 
 export async function registerUser(formData: FormData) {
-  // Rate limit: 5/hour per IP — check before any DB work
+  // 5 registrations per hour per IP, counted in Postgres so the limit holds
+  // across serverless instances rather than per warm isolate.
   try {
     const hdrs = await headers();
     const ip = getClientIp(hdrs);
-    if (!checkRateLimit(`register:${ip}`, 5, 60 * 60 * 1000)) {
+    const gate = await enforceRateLimit(`register:ip:${ip}`, 5, 60 * 60 * 1000);
+    if (!gate.allowed) {
       return { ok: false, code: "RATE_LIMITED", message: "註冊過於頻繁，請稍後再試" };
     }
   } catch {
     // headers() may fail in some contexts (tests); fail open for availability,
-    // per-instance limit still applies on next call via IP fallback "unknown"
+    // the shared counter still applies on the next call via the "unknown" IP.
   }
   const raw = {
     email: String(formData.get("email") ?? "").trim().toLowerCase(),
@@ -52,8 +58,13 @@ export async function registerUser(formData: FormData) {
   const existsEmail = await prisma.user.findUnique({ where: { email } });
   if (existsEmail) return { ok: false, code: "EMAIL_TAKEN", message: "Email 已被使用" };
 
-  const hash = await bcrypt.hash(password, 12);
-  await prisma.user.create({
+  // Reject weak passwords with the same rules the reset flow applies, so the
+  // two entry points cannot drift apart.
+  const weak = validatePassword(password, { email, nickname });
+  if (weak) return { ok: false, code: "WEAK_PASSWORD", message: weak };
+
+  const hash = await hashPassword(password);
+  const created = await prisma.user.create({
     data: {
       email,
       passwordHash: hash,
@@ -61,7 +72,19 @@ export async function registerUser(formData: FormData) {
       memberType: memberType as never,
       profileComplete: true,
     },
+    select: { id: true },
   });
+
+  // Mail the ownership proof immediately. Failure is non-fatal — the account
+  // works, and /settings offers a resend — but it is worth a log line.
+  try {
+    await issueEmailVerification(created.id, email);
+  } catch (err) {
+    logger.error("register: verification mail failed", {
+      userId: created.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // Auto login
   try {

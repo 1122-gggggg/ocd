@@ -82,6 +82,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         nickname: string;
         profileComplete: boolean;
         email: string | null;
+        emailVerified?: Date | null;
       }) => {
         (token as Record<string, unknown>).id = dbUser.id;
         (token as Record<string, unknown>).role = dbUser.role;
@@ -92,12 +93,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (token as Record<string, unknown>).profileComplete =
           dbUser.profileComplete;
         (token as Record<string, unknown>).email = dbUser.email;
+        (token as Record<string, unknown>).emailVerified = dbUser.emailVerified
+          ? dbUser.emailVerified.getTime()
+          : null;
         (token as Record<string, unknown>).lastVerified = now;
+      };
+
+      /**
+       * Sessions are JWTs, so deleting Session rows does not sign anyone out.
+       * A password reset stamps `sessionsInvalidBefore`; any token minted before
+       * that instant is refused here, at most 60s after the reset.
+       */
+      const supersededByPasswordChange = (cutoff: Date | null): boolean => {
+        if (!cutoff) return false;
+        const loginAt = (token as Record<string, unknown>).loginAt;
+        // A token with no loginAt predates this check entirely — treat it as old.
+        return typeof loginAt !== "number" || loginAt < cutoff.getTime();
       };
 
       try {
         // (1) Initial login: user.id present -> fetch once and populate
         if (user?.id) {
+          (token as Record<string, unknown>).loginAt = now;
           if (isEdge) {
             (token as Record<string, unknown>).id = user.id as string;
             return token;
@@ -152,9 +169,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               where: { id: token.id as string },
             });
             if (dbUser) {
+              // Account deleted, or password changed on another device.
+              if (supersededByPasswordChange(dbUser.sessionsInvalidBefore)) {
+                return null;
+              }
               populate(dbUser);
             } else {
-              (token as Record<string, unknown>).lastVerified = now;
+              // The row is gone (self-service deletion): end the session rather
+              // than carrying a token that points at nothing.
+              return null;
             }
           } catch {
             // keep token
@@ -174,6 +197,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as unknown as Record<string, unknown>).clinicianStatus = token.clinicianStatus;
         (session.user as unknown as Record<string, unknown>).nickname = token.nickname;
         (session.user as unknown as Record<string, unknown>).profileComplete = token.profileComplete;
+        (session.user as unknown as Record<string, unknown>).emailVerified = token.emailVerified;
         if (token.email) session.user.email = token.email as string;
         if (token.nickname) session.user.name = token.nickname as string;
       }

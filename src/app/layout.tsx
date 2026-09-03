@@ -5,6 +5,8 @@ import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { getCachedBoards } from "@/lib/cache";
 import { SiteHeader } from "@/components/SiteHeader";
+import { mailerConfigured } from "@/lib/mailer";
+import { emailVerificationEnforced } from "@/lib/email-verification";
 
 const notoSansTC = Noto_Sans_TC({
   subsets: ["latin"],
@@ -48,6 +50,34 @@ async function Header() {
     : null;
 
   return <SiteHeader boards={boards} user={user} signOutAction={signOutAction} />;
+}
+
+/**
+ * Nudge for accounts whose address is still unproven. Shown site-wide because
+ * the consequence — no self-service password reset — only becomes visible at
+ * the exact moment the member can no longer read a banner.
+ */
+async function EmailNotice() {
+  if (!mailerConfigured) return null;
+  const session = (await auth()) as unknown as {
+    user?: { email?: string | null; emailVerified?: number | null };
+  } | null;
+  const user = session?.user;
+  if (!user?.email || user.emailVerified) return null;
+
+  return (
+    <div className="container-page pt-4">
+      <p className="alert alert-error">
+        <span>
+          你的 Email 還沒驗證
+          {emailVerificationEnforced ? "，驗證前無法發文或回覆" : "，忘記密碼時將無法自助重設"}。
+        </span>
+        <Link href="/settings#email" className="underline underline-offset-2 font-medium">
+          前往驗證
+        </Link>
+      </p>
+    </div>
+  );
 }
 
 function Footer() {
@@ -119,6 +149,7 @@ export default async function RootLayout({
           跳到主要內容
         </a>
         <Header />
+        <EmailNotice />
         <main id="main" className="flex-1">
           <div className="container-page py-6 sm:py-8">{children}</div>
         </main>

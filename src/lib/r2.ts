@@ -1,4 +1,4 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import { HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
 
 /**
  * Cloudflare R2 (S3-compatible) client for Vercel serverless.
@@ -30,3 +30,31 @@ export const r2 = r2Enabled
       },
     })
   : null;
+
+/**
+ * Prove the credentials actually work, rather than just that they are present.
+ *
+ * `r2Enabled` only checks that three env vars are non-empty, which is exactly
+ * the state a misconfigured deploy is in: uploads look wired up until the first
+ * clinician tries to submit a proof and gets a 500. HeadBucket is the cheapest
+ * call that exercises signing, endpoint and permissions together.
+ *
+ * Kept out of the default health response because it costs a network round trip
+ * to Cloudflare; /api/health?deep=1 opts in.
+ */
+export async function checkR2(): Promise<
+  { ok: true } | { ok: false; reason: string }
+> {
+  if (!r2) return { ok: false, reason: "NOT_CONFIGURED" };
+  try {
+    await r2.send(new HeadBucketCommand({ Bucket: R2_BUCKET }));
+    return { ok: true };
+  } catch (err) {
+    const e = err as { name?: string; message?: string; $metadata?: { httpStatusCode?: number } };
+    const status = e.$metadata?.httpStatusCode;
+    return {
+      ok: false,
+      reason: `${e.name ?? "Error"}${status ? ` (HTTP ${status})` : ""}: ${(e.message ?? "").slice(0, 200)}`,
+    };
+  }
+}

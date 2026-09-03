@@ -4,7 +4,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { canCreatePost, canReply } from "@/lib/permissions";
 import { containsCrisisKeyword } from "@/lib/crisis-keywords";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit } from "@/lib/rate-limit-db";
+import { requireVerifiedEmail } from "@/lib/email-verification";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -19,9 +20,12 @@ export async function createPost(
   if (!user?.id) {
     return { ok: false, code: "UNAUTHORIZED", message: "請先登入" };
   }
-  if (!checkRateLimit(`createPost:${user.id}`, 5, 60_000)) {
+  const postGate = await enforceRateLimit(`createPost:${user.id}`, 5, 60_000);
+  if (!postGate.allowed) {
     return { ok: false, code: "RATE_LIMITED", message: "發文過於頻繁，請稍後再試" };
   }
+  const unverified = await requireVerifiedEmail(user.id);
+  if (unverified) return unverified;
   const title = String(formData.get("title") ?? "").trim();
   const bodyMd = String(formData.get("bodyMd") ?? "").trim();
   const isAnonymous =
@@ -80,9 +84,12 @@ export async function createReply(
   if (!user?.id) {
     return { ok: false, code: "UNAUTHORIZED" };
   }
-  if (!checkRateLimit(`createReply:${user.id}`, 10, 60_000)) {
+  const replyGate = await enforceRateLimit(`createReply:${user.id}`, 10, 60_000);
+  if (!replyGate.allowed) {
     return { ok: false, code: "RATE_LIMITED", message: "回覆過於頻繁，請稍後再試" };
   }
+  const unverified = await requireVerifiedEmail(user.id);
+  if (unverified) return unverified;
   const bodyMd = String(formData.get("bodyMd") ?? "").trim();
   const isAnonymous =
     formData.get("isAnonymous") === "1" || formData.get("isAnonymous") === "on";

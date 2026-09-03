@@ -86,6 +86,21 @@ export function checkRateLimit(
 }
 
 /**
+ * Weight the previous window by how much of it is still inside the trailing
+ * window, and add the current one. Exported so the arithmetic can be tested
+ * without a database.
+ */
+export function estimateSlidingWindow(
+  previousCount: number,
+  currentCount: number,
+  elapsedMs: number,
+  windowMs: number,
+): number {
+  const carry = previousCount * ((windowMs - elapsedMs) / windowMs);
+  return Math.round(carry + currentCount);
+}
+
+/**
  * Detailed check with remaining / reset info. Useful for middleware
  * 429 responses and for testing without re-implementing window logic.
  */

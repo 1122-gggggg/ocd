@@ -75,6 +75,29 @@ curl -s -D - https://ocd.yourdomain.tw/b/newcomers/new | grep -q "location: /log
 
 本地已驗證的 8 步在線上同樣成立 (見 `local://ocd-support-forum-plan.md` Verification)。
 
+## 5.5 帳號、隱私與通知（必讀）
+
+重設密碼、Email 驗證、刪除帳號 / 資料匯出、跨執行個體限流、舉報通知，
+以及要新增哪些環境變數，全部整理在 **[`docs/ACCOUNTS_AND_OPS.md`](docs/ACCOUNTS_AND_OPS.md)**。
+
+上線前至少要確認三件事：
+
+```bash
+# 1. 設定檢查（登入後台總覽 /admin 會用中文列出所有問題並附處理方式）
+curl -s https://your-site/api/health | jq
+#    mail:false        → 忘記密碼與 Email 驗證不會運作
+#    reportAlerts:false→ 舉報只能靠人工進後台看
+#    authSecret:false  → AUTH_SECRET 沒設
+
+# 2. R2 憑證是不是真的能用（預設的 r2 欄位只看環境變數有沒有設）
+curl -s "https://your-site/api/health?deep=1" | jq .r2Live
+
+# 3. 站務密碼還是不是文件裡那組
+npm run admin:password
+```
+
+`AUTH_SECRET` 設定後就不要再改 —— 一改全站登出。
+
 ## 6. 維運
 
 - **備份**: 三層，缺一不可
@@ -87,6 +110,11 @@ curl -s -D - https://ocd.yourdomain.tw/b/newcomers/new | grep -q "location: /log
   3. **手動 / CI**：`scripts/backup/neon-to-r2.sh` 走 `DIRECT_URL` + `pg_dump --no-owner | gzip | aws s3 cp`，輸出到 `backups/neon-YYYYMMDD.sql.gz`。這是完整的 SQL dump，還原度最高，但 `pg_dump` / `aws` 在 Vercel serverless 裡不存在，所以只能在本機或 CI 跑。兩者副檔名不同，不會互相覆蓋。
 
   驗證每日備份有在跑：Vercel → Logs 搜 `cron/backup: uploaded`，或到 R2 看 `backups/` 有沒有當天的 `logical-*.json.gz`。
+- **夜間清理**：`vercel.json` 另有一支 03:30 的 `GET /api/cron/maintenance`（共用 `CRON_SECRET`），
+  清掉過期的重設 / 驗證 token 與限流視窗，並補寄先前沒送出去的舉報通知。
+  Logs 搜 `cron/maintenance: completed`。
+- **舉報通知**：設定 `ADMIN_ALERT_EMAIL` 或 `REPORT_WEBHOOK_URL`，否則舉報只會靜靜躺在後台。
+  詳見 `docs/ACCOUNTS_AND_OPS.md` §6。
 - **升級**: Vercel Hobby 100GB 頻寬足 500人，爆了再 `Vercel Pro $20`，Neon 自動 scale 不需手動
 - **上傳**: 已切 `R2` (`src/lib/r2.ts` + `R2_*` 環境變數)。`uploads/clinician-proof` 不再寫本地磁碟 (Vercel 無持久磁碟)，改由 `S3Client` 上傳至 `R2_BUCKET` (預設 `ocd-proofs`)，`proofPath` 存 R2 URL/key。
 - **日誌**: Vercel → Logs, Neon → Monitoring
@@ -101,7 +129,12 @@ npx prisma migrate deploy
 npx prisma db seed
 
 # 檢查
-npx vitest run           # 16 tests
+npx vitest run           # 單元測試
+npm run smoke            # 真實瀏覽器跑完註冊→發文→回覆→重設密碼→刪帳號
+                         # 需另外安裝 playwright，詳見 docs/ACCOUNTS_AND_OPS.md §10
+
+# 站務密碼輪替（stdin 讀取、不回顯、換完所有登入狀態失效）
+npm run admin:password
 ```
 
 ## 常見坑
@@ -112,5 +145,8 @@ npx vitest run           # 16 tests
 | `prepared statement ... does not exist` | `migrate deploy` 用了 pooled，改用 `DIRECT_URL` |
 | `JWTSessionError edge` | 已修 `src/auth.ts` 的 `isEdge`  guard，確保 `vercel.json` 為 `hnd1` |
 | `uploads` 404 | Vercel 無持久磁碟，必須切 R2 — 確認 `R2_*` 已設且 `r2Enabled` 為 true |
+| 忘記密碼頁說「尚未設定郵件服務」 | 沒有 `RESEND_API_KEY` 或 `MAIL_WEBHOOK_URL`，見 `docs/ACCOUNTS_AND_OPS.md` §1 |
+| 信件連結指向錯的網域 | 設定 `PUBLIC_SITE_URL`（排程沒有請求可用，只能靠這個變數） |
+| 沒有人能發文，錯誤說要先驗證 Email | `REQUIRE_EMAIL_VERIFICATION=true` 但郵件服務有問題；`/admin` 會標示出來 |
 
 有問題貼 `Vercel Deploy Logs` 前 50 行即可定位。

@@ -27,13 +27,21 @@ const withSession = auth((req) => {
   const isAuthRoute = pathname.startsWith("/api/auth");
   const isLogin = pathname === "/login";
   const isRegister = pathname === "/register";
+  // Account-recovery routes stay reachable before onboarding is finished:
+  // bouncing someone with a live reset link to /onboarding would burn the link
+  // and leave them no way back in.
+  const isRecovery =
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
+    pathname === "/verify-email";
   if (
     session?.user &&
     session.user.profileComplete === false &&
     !isOnboarding &&
     !isAuthRoute &&
     !isLogin &&
-    !isRegister
+    !isRegister &&
+    !isRecovery
   ) {
     return NextResponse.redirect(new URL("/onboarding", req.url));
   }
