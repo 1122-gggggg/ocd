@@ -221,8 +221,15 @@ export function SiteHeader({
               )}
             </div>
           ))}
+          <Link
+            href="/learn"
+            className={`btn btn-ghost btn-sm ${
+              pathname?.startsWith("/learn") ? "text-accent font-medium bg-accent-soft" : ""
+            }`}
+          >
+            學習資源區
+          </Link>
         </nav>
-
         <div className="flex-1" />
 
         {/* Account area */}
@@ -353,6 +360,9 @@ export function SiteHeader({
                 </div>
               ))}
               <div className="border-t border-line pt-3 flex flex-wrap gap-2">
+                <Link href="/learn" className="btn btn-secondary btn-sm">
+                  學習資源區
+                </Link>
                 <Link href="/boards/apply" className="btn btn-secondary btn-sm">
                   申請開版
                 </Link>

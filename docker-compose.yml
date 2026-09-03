@@ -29,6 +29,9 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+      # Anonymous dev cache: isolates container turbopack output from the
+      # host's `next build` output (sharing one .next corrupts both).
+      - /app/.next
     environment:
       DATABASE_URL: postgresql://ocd:ocd@db:5432/ocd?schema=public
       DIRECT_URL: postgresql://ocd:ocd@db:5432/ocd?schema=public
