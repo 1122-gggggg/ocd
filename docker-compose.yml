@@ -18,6 +18,9 @@ services:
 
   web:
     build: .
+    # Prod image runs as USER nextjs; dev bind-mount (.:/app) is host-owned,
+    # so run dev as root. Prod (Dockerfile CMD) stays non-root.
+    user: "0:0"
     depends_on:
       db:
         condition: service_healthy
