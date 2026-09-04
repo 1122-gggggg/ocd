@@ -19,11 +19,21 @@ const appStatusLabel: Record<string, string> = {
   APPROVED: "已核准",
   REJECTED: "已駁回",
 };
+const ERROR_MESSAGES: Record<string, string> = {
+  FORBIDDEN: "此申請僅限身分為「臨床工作者」的會員填寫。",
+  INVALID_TITLE: "請填寫有效的職稱（1-100 字）。",
+  INVALID_SPECIALTY: "請填寫有效的專長（1-100 字）。",
+  INVALID_STATEMENT: "請填寫說明（1-2000 字）。",
+  STORAGE_NOT_CONFIGURED: "檔案上傳服務尚未配置，請聯絡站長。",
+  INVALID_FILE_TYPE: "檔案格式不符，僅接受 JPG、PNG 或 PDF。",
+  FILE_TOO_LARGE: "檔案大小不能超過 5MB。",
+  INVALID_FILE_CONTENT: "檔案內容與格式不符，僅接受有效的 JPG、PNG 或 PDF。",
+};
 
 export default async function ClinicianApplyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string }>;
+  searchParams: Promise<{ ok?: string; err?: string }>;
 }) {
   const session = (await auth()) as unknown as { user?: { id: string } } | null;
   if (!session?.user?.id) redirect("/login?callbackUrl=/clinician/apply");
@@ -83,6 +93,11 @@ export default async function ClinicianApplyPage({
         </header>
 
         {params.ok && <p className="alert alert-success">已送出，待管理員審核。</p>}
+        {params.err && (
+          <p role="alert" className="alert alert-error">
+            {ERROR_MESSAGES[params.err] ?? "送出失敗，請檢查輸入內容後再試一次。"}
+          </p>
+        )}
         {app?.reviewNote && (
           <div className="alert">
             <span aria-hidden="true">📝</span>

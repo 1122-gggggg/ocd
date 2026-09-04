@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { updateOfficialMd } from "@/app/actions/boards";
 import { EmptyState, PageHeader } from "@/components/ui";
@@ -71,7 +72,18 @@ export default async function AdminBoardEditPage({
         </p>
       )}
 
-      <form action={async (fd: FormData) => { "use server"; await updateOfficialMd(fd); }} className="card card-pad space-y-4">
+      <form
+        action={async (fd: FormData) => {
+          "use server";
+          const res = await updateOfficialMd(fd);
+          if (res.ok) {
+            redirect(`/admin/boards/${board.slug}?ok=1`);
+          } else {
+            redirect(`/admin/boards/${board.slug}?err=${res.code ?? "UNKNOWN"}`);
+          }
+        }}
+        className="card card-pad space-y-4"
+      >
         <input type="hidden" name="slug" value={board.slug} />
         <div>
           <label className="label" htmlFor="officialMd">

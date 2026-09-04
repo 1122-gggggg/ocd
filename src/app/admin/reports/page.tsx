@@ -62,6 +62,46 @@ export default async function AdminReportsPage({
     }),
   ]);
 
+  const postIds = reports.filter((r) => r.targetType === "POST").map((r) => r.targetId);
+  const replyIds = reports.filter((r) => r.targetType === "REPLY").map((r) => r.targetId);
+
+  const [reportedPosts, reportedReplies] = await Promise.all([
+    postIds.length > 0
+      ? prisma.post.findMany({
+          where: { id: { in: postIds } },
+          select: {
+            id: true,
+            title: true,
+            bodyMd: true,
+            deletedAt: true,
+            author: { select: { nickname: true } },
+            board: { select: { slug: true, name: true } },
+          },
+        })
+      : [],
+    replyIds.length > 0
+      ? prisma.reply.findMany({
+          where: { id: { in: replyIds } },
+          select: {
+            id: true,
+            floor: true,
+            bodyMd: true,
+            deletedAt: true,
+            author: { select: { nickname: true } },
+            post: {
+              select: {
+                id: true,
+                title: true,
+                board: { select: { slug: true, name: true } },
+              },
+            },
+          },
+        })
+      : [],
+  ]);
+
+  const postMap = new Map(reportedPosts.map((p) => [p.id, p]));
+  const replyMap = new Map(reportedReplies.map((r) => [r.id, r]));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const qs = (p: number, s: ReportStatusFilter | null) =>
@@ -97,25 +137,82 @@ export default async function AdminReportsPage({
         <ul className="space-y-3">
           {reports.map((r) => {
             const s = STATUS[r.status] ?? { label: r.status, cls: "badge" };
-            return (
-              <li key={r.id} className="card card-pad space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="badge badge-accent">
-                    {TARGET_LABEL[r.targetType] ?? r.targetType}
-                  </span>
-                  <span className={s.cls}>{s.label}</span>
-                  <code className="mono text-xs text-subtle break-all">{r.targetId}</code>
-                </div>
+              const post = r.targetType === "POST" ? postMap.get(r.targetId) : null;
+              const reply = r.targetType === "REPLY" ? replyMap.get(r.targetId) : null;
+              const isDeleted = post ? !!post.deletedAt : reply ? !!reply.deletedAt : false;
+              const contentNotFound = r.targetType === "POST" ? !post : !reply;
 
-                <p className="text-sm leading-relaxed name-clip">
-                  <span className="text-muted">理由：</span>
-                  {r.reason}
-                </p>
+              return (
+                <li key={r.id} className="card card-pad space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="badge badge-accent">
+                      {TARGET_LABEL[r.targetType] ?? r.targetType}
+                    </span>
+                    <span className={s.cls}>{s.label}</span>
+                    {contentNotFound ? (
+                      <span className="badge badge-danger">內容已被物理刪除</span>
+                    ) : isDeleted ? (
+                      <span className="badge badge-danger">目前已標記刪除</span>
+                    ) : (
+                      <span className="badge badge-success">目前正常顯示</span>
+                    )}
+                  </div>
 
-                <p className="text-xs text-subtle name-clip">
-                  舉報人：{r.reporter.nickname}・{formatDateTime(r.createdAt)}
-                </p>
+                  {/* Reported content preview */}
+                  {post && (
+                    <div className="rounded-lg border border-line bg-surface-2 p-3 space-y-1 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold text-fg name-clip">
+                          [{post.board.name}] {post.title}
+                        </span>
+                        <Link
+                          href={`/b/${post.board.slug}/p/${post.id}`}
+                          target="_blank"
+                          className="text-xs text-accent underline underline-offset-2"
+                        >
+                          前往查看文章 ↗
+                        </Link>
+                      </div>
+                      <p className="text-xs text-muted line-clamp-3 leading-relaxed">
+                        {post.bodyMd}
+                      </p>
+                      <div className="text-[11px] text-subtle">
+                        作者：{post.author.nickname}
+                      </div>
+                    </div>
+                  )}
 
+                  {reply && (
+                    <div className="rounded-lg border border-line bg-surface-2 p-3 space-y-1 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold text-fg name-clip">
+                          [{reply.post.board.name}] #{reply.floor} 樓回覆（原文：{reply.post.title}）
+                        </span>
+                        <Link
+                          href={`/b/${reply.post.board.slug}/p/${reply.post.id}#f${reply.floor}`}
+                          target="_blank"
+                          className="text-xs text-accent underline underline-offset-2"
+                        >
+                          前往查看回覆 ↗
+                        </Link>
+                      </div>
+                      <p className="text-xs text-muted line-clamp-3 leading-relaxed">
+                        {reply.bodyMd}
+                      </p>
+                      <div className="text-[11px] text-subtle">
+                        作者：{reply.author.nickname}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-sm leading-relaxed">
+                    <span className="font-medium text-fg">舉報理由：</span>
+                    <span className="text-muted">{r.reason}</span>
+                  </div>
+
+                  <p className="text-xs text-subtle name-clip">
+                    舉報人：{r.reporter.nickname}・{formatDateTime(r.createdAt)}
+                  </p>
                 <div className="flex flex-wrap gap-2 border-t border-line pt-3">
                   <form action={moderateContent as unknown as string} className="flex gap-2">
                     <input type="hidden" name="targetType" value={r.targetType} />

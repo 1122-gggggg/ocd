@@ -5,10 +5,19 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "申請開版" };
 
+const ERROR_MESSAGES: Record<string, string> = {
+  SLUG_TAKEN: "該版區代稱 (slug) 已被使用或已有申請中，請換一個。",
+  INVALID_SLUG: "代稱 (slug) 格式不符，僅允許小寫英文、數字與 -，長度 2-40 字。",
+  INVALID_NAME: "版區名稱長度需為 1-40 字。",
+  INVALID_GROUP: "請選擇正確的版區分組。",
+  INVALID_DESC: "版區說明不能為空且需在 500 字以內。",
+  INVALID_RATIONALE: "申請理由不能為空且需在 2000 字以內。",
+};
+
 export default async function BoardApplyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string }>;
+  searchParams: Promise<{ ok?: string; err?: string }>;
 }) {
   const session = (await auth()) as unknown as { user?: { id: string } } | null;
   if (!session?.user?.id) redirect("/login?callbackUrl=/boards/apply");
@@ -26,6 +35,11 @@ export default async function BoardApplyPage({
 
         {params.ok && (
           <p className="alert alert-success">已送出申請，管理員審核後會開設版區。</p>
+        )}
+        {params.err && (
+          <p role="alert" className="alert alert-error">
+            {ERROR_MESSAGES[params.err] ?? "送出失敗，請檢查輸入內容後再試一次。"}
+          </p>
         )}
 
         <form action={createBoardApplication as unknown as string} className="space-y-4">

@@ -45,42 +45,42 @@ function hasAllowedProofMagic(head: Uint8Array, mime: string): boolean {
 }
 export async function createClinicianApplication(formData: FormData) {
   const session = (await auth()) as unknown as { user?: { id: string; memberType: string } } | null;
-  if (!session?.user?.id) return { ok: false, code: "UNAUTHORIZED" };
+  if (!session?.user?.id) redirect("/login?callbackUrl=/clinician/apply");
   const dbUser = await prisma.user.findUnique({ where: { id: session.user.id } });
-  if (!dbUser) return { ok: false, code: "NOT_FOUND" };
+  if (!dbUser) redirect("/login");
   if (dbUser.memberType !== "CLINICIAN") {
-    return { ok: false, code: "FORBIDDEN", message: "註冊時請選臨床者" };
+    redirect("/clinician/apply?err=FORBIDDEN");
   }
 
   const title = String(formData.get("title") ?? "").trim();
   const specialty = String(formData.get("specialty") ?? "").trim();
   const statement = String(formData.get("statement") ?? "").trim();
-  if (!title || title.length > 100) return { ok: false, code: "INVALID_TITLE" };
-  if (!specialty || specialty.length > 100) return { ok: false, code: "INVALID_SPECIALTY" };
-  if (!statement || statement.length > 2000) return { ok: false, code: "INVALID_STATEMENT" };
+  if (!title || title.length > 100) redirect("/clinician/apply?err=INVALID_TITLE");
+  if (!specialty || specialty.length > 100) redirect("/clinician/apply?err=INVALID_SPECIALTY");
+  if (!statement || statement.length > 2000) redirect("/clinician/apply?err=INVALID_STATEMENT");
 
   let proofPath: string | null = null;
   const file = formData.get("proof") as unknown as File | null;
   if (file && typeof file === "object" && "arrayBuffer" in file && file.size > 0) {
-    if (!r2Enabled) return { ok: false, code: "STORAGE_NOT_CONFIGURED" };
+    if (!r2Enabled) redirect("/clinician/apply?err=STORAGE_NOT_CONFIGURED");
     if (!PROOF_ALLOWED_TYPES.includes(file.type)) {
-      return { ok: false, code: "INVALID_FILE_TYPE", message: "僅接受 jpeg/png/pdf" };
+      redirect("/clinician/apply?err=INVALID_FILE_TYPE");
     }
     if (file.size > PROOF_MAX_BYTES) {
-      return { ok: false, code: "FILE_TOO_LARGE", message: "檔案需 ≤5MB" };
+      redirect("/clinician/apply?err=FILE_TOO_LARGE");
     }
     // Extension allowlist from the client filename, consistent with the MIME
     // type. Both are spoofable — the magic-byte check below decides.
     const nameExt = (file.name.split(".").pop() ?? "").toLowerCase();
     if (!nameExt || PROOF_MIME_BY_EXT[nameExt] !== file.type) {
-      return { ok: false, code: "INVALID_FILE_TYPE", message: "僅接受 jpeg/png/pdf" };
+      redirect("/clinician/apply?err=INVALID_FILE_TYPE");
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.byteLength > PROOF_MAX_BYTES) {
-      return { ok: false, code: "FILE_TOO_LARGE", message: "檔案需 ≤5MB" };
+      redirect("/clinician/apply?err=FILE_TOO_LARGE");
     }
     if (!hasAllowedProofMagic(buffer, file.type)) {
-      return { ok: false, code: "INVALID_FILE_TYPE", message: "檔案內容與格式不符，僅接受 jpeg/png/pdf" };
+      redirect("/clinician/apply?err=INVALID_FILE_CONTENT");
     }
     const ext = PROOF_EXT_BY_MIME[file.type] ?? "bin";
     // Server-randomized key: never derive storage paths from user input.

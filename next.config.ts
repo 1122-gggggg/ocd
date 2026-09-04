@@ -22,7 +22,10 @@ const vercelAuthDefines = process.env.VERCEL === "1"
   : {};
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  output:
+    process.env.OUTPUT_STANDALONE === "1" || process.env.DOCKER === "1"
+      ? "standalone"
+      : undefined,
   poweredByHeader: false,
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: false },

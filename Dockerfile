@@ -17,6 +17,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
+# next.config.ts gates `output: "standalone"` behind this; without it the
+# runner stage has no .next/standalone to COPY.
+ENV OUTPUT_STANDALONE=1
 RUN npm run build
 
 FROM base AS runner

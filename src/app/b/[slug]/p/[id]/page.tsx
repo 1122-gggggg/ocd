@@ -5,8 +5,9 @@ import { Markdown } from "@/lib/markdown";
 import { publicAuthorLabel } from "@/lib/display";
 import { canReply } from "@/lib/permissions";
 import { createReply, updatePost, deletePost, updateReply, deleteReply } from "@/app/actions/posts";
-import { createReport } from "@/app/actions/reports";
 import { PostForm } from "@/components/PostForm";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { ReportBox } from "@/components/ReportBox";
 import { AuthorMeta, Pagination } from "@/components/ui";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -43,6 +44,7 @@ const getPost = cache(async (id: string) =>
       createdAt: true,
       updatedAt: true,
       deletedAt: true,
+      deletedById: true,
       author: { select: authorSelect },
     },
   })
@@ -110,6 +112,7 @@ export default async function PostPage({
         isAnonymous: true,
         createdAt: true,
         deletedAt: true,
+        deletedById: true,
         author: { select: authorSelect },
       },
     }),
@@ -143,7 +146,9 @@ export default async function PostPage({
       {/* Original post */}
       <article className="card card-pad space-y-4">
         {isDeleted && !isAdmin ? (
-          <p className="text-muted italic">此內容已由管理員移除。</p>
+          <p className="text-muted italic">
+            {post.deletedById === post.authorId ? "此內容已被作者刪除。" : "此內容已由管理員移除。"}
+          </p>
         ) : (
           <>
             <header className="space-y-3">
@@ -215,9 +220,9 @@ export default async function PostPage({
                       </form>
                     </details>
                     <form action={deletePost.bind(null, post.id) as unknown as string}>
-                      <button type="submit" className="btn btn-danger btn-sm">
+                      <ConfirmSubmitButton confirmMessage="確定要刪除這篇文章嗎？刪除後無法自行恢復。">
                         刪除
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   </>
                 )}
@@ -250,7 +255,9 @@ export default async function PostPage({
                   <li key={r.id} className="card p-4">
                     <div className="flex items-center gap-2 text-xs text-subtle">
                       <span className="mono">#{r.floor}</span>
-                      <span className="italic">此內容已由管理員移除</span>
+                      <span className="italic">
+                        {r.deletedById === r.authorId ? "此內容已被作者刪除" : "此內容已由管理員移除"}
+                      </span>
                     </div>
                   </li>
                 );
@@ -313,9 +320,9 @@ export default async function PostPage({
                             </form>
                           </details>
                           <form action={deleteReply.bind(null, r.id) as unknown as string}>
-                            <button type="submit" className="btn btn-danger btn-sm">
+                            <ConfirmSubmitButton confirmMessage="確定要刪除此則回覆嗎？刪除後無法自行恢復。">
                               刪除
-                            </button>
+                            </ConfirmSubmitButton>
                           </form>
                         </>
                       )}
@@ -380,30 +387,3 @@ export default async function PostPage({
   );
 }
 
-function ReportBox({ targetType, targetId }: { targetType: "POST" | "REPLY"; targetId: string }) {
-  return (
-    <details className="w-full">
-      <summary className="btn btn-ghost btn-sm">⚑ 舉報</summary>
-      <form
-        action={createReport as unknown as string}
-        className="mt-3 space-y-2 rounded-lg border border-line bg-surface-2 p-3"
-      >
-        <input type="hidden" name="targetType" value={targetType} />
-        <input type="hidden" name="targetId" value={targetId} />
-        <textarea
-          name="reason"
-          required
-          minLength={10}
-          maxLength={500}
-          placeholder="請說明理由（10–500 字）"
-          className="textarea"
-          rows={3}
-          aria-label="舉報理由"
-        />
-        <button type="submit" className="btn btn-secondary btn-sm">
-          送出舉報
-        </button>
-      </form>
-    </details>
-  );
-}

@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { signIn, auth } from "@/auth";
+import { signIn, auth, unstable_update } from "@/auth";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -139,6 +139,17 @@ export async function completeOnboarding(formData: FormData) {
       profileComplete: true,
     },
   });
+  try {
+    await unstable_update({
+      user: {
+        profileComplete: true,
+        nickname,
+        memberType,
+      },
+    });
+  } catch {
+    // session update best-effort fallback
+  }
   revalidatePath("/", "layout");
   redirect("/");
 }
@@ -156,6 +167,16 @@ export async function updateNickname(formData: FormData) {
     where: { id: session.user.id },
     data: { nickname },
   });
+  try {
+    await unstable_update({
+      user: {
+        nickname,
+        name: nickname,
+      },
+    });
+  } catch {
+    // session update best-effort fallback
+  }
 
   revalidatePath("/", "layout");
   revalidatePath("/settings");

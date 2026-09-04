@@ -39,7 +39,7 @@ const adapter = {
 const DUMMY_PASSWORD_HASH =
   "$2b$10$57aFuTsSK8XwllZ4l5ZdWORSnbKTMaZjcdyzZo/Wt5aWtYNeuY0li";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
   adapter,
   providers: [

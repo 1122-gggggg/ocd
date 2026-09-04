@@ -14,24 +14,24 @@ function normalizeSlug(s: string): string | null {
 
 export async function createBoardApplication(formData: FormData) {
   const session = await auth() as unknown as { user?: { id: string } } | null;
-  if (!session?.user?.id) return { ok: false, code: "UNAUTHORIZED" };
+  if (!session?.user?.id) redirect("/login?callbackUrl=/boards/apply");
   const name = String(formData.get("name") ?? "").trim();
   const slugRaw = String(formData.get("slug") ?? "").trim();
   const group = String(formData.get("group") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const rationale = String(formData.get("rationale") ?? "").trim();
 
-  if (!name || name.length > 40) return { ok: false, code: "INVALID_NAME" };
+  if (!name || name.length > 40) redirect("/boards/apply?err=INVALID_NAME");
   const slug = normalizeSlug(slugRaw);
-  if (!slug) return { ok: false, code: "INVALID_SLUG", message: "slug 僅允許小寫英文、數字與 -，2-40 字" };
-  if (!["SYMPTOM", "TREATMENT", "COMMUNITY"].includes(group)) return { ok: false, code: "INVALID_GROUP" };
-  if (!description || description.length > 500) return { ok: false, code: "INVALID_DESC" };
-  if (!rationale || rationale.length > 2000) return { ok: false, code: "INVALID_RATIONALE" };
+  if (!slug) redirect("/boards/apply?err=INVALID_SLUG");
+  if (!["SYMPTOM", "TREATMENT", "COMMUNITY"].includes(group)) redirect("/boards/apply?err=INVALID_GROUP");
+  if (!description || description.length > 500) redirect("/boards/apply?err=INVALID_DESC");
+  if (!rationale || rationale.length > 2000) redirect("/boards/apply?err=INVALID_RATIONALE");
 
   const existsBoard = await prisma.board.findUnique({ where: { slug }, select: { id: true } });
-  if (existsBoard) return { ok: false, code: "SLUG_TAKEN", message: "slug 已被版區使用" };
+  if (existsBoard) redirect("/boards/apply?err=SLUG_TAKEN");
   const existsPending = await prisma.boardApplication.findFirst({ where: { slug, status: "PENDING" }, select: { id: true } });
-  if (existsPending) return { ok: false, code: "SLUG_TAKEN", message: "slug 已有待審申請" };
+  if (existsPending) redirect("/boards/apply?err=SLUG_TAKEN");
 
   await prisma.boardApplication.create({
     data: {
