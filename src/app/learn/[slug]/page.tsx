@@ -12,6 +12,7 @@ import { entries as symptomsB } from "@/data/learn/symptoms-b";
 import { entries as symptomsC } from "@/data/learn/symptoms-c";
 import { entries as treatmentsA } from "@/data/learn/treatments-a";
 import { entries as treatmentsB } from "@/data/learn/treatments-b";
+import { entries as treatmentsC } from "@/data/learn/treatments-c";
 
 const allEntries: LearnEntry[] = [
   ...symptomsA,
@@ -19,6 +20,7 @@ const allEntries: LearnEntry[] = [
   ...symptomsC,
   ...treatmentsA,
   ...treatmentsB,
+  ...treatmentsC,
 ];
 
 export function generateStaticParams(): { slug: string }[] {

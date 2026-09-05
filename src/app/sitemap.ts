@@ -6,6 +6,7 @@ import { entries as learnSymptomsB } from "@/data/learn/symptoms-b";
 import { entries as learnSymptomsC } from "@/data/learn/symptoms-c";
 import { entries as learnTreatmentsA } from "@/data/learn/treatments-a";
 import { entries as learnTreatmentsB } from "@/data/learn/treatments-b";
+import { entries as learnTreatmentsC } from "@/data/learn/treatments-c";
 
 export const revalidate = 3600;
 
@@ -37,6 +38,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     {
+      url: `${base}/self-help`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
+    {
       url: `${base}/learn/clinics`,
       lastModified: now,
       changeFrequency: "monthly",
@@ -50,6 +57,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...learnSymptomsC,
     ...learnTreatmentsA,
     ...learnTreatmentsB,
+    ...learnTreatmentsC,
   ]) {
     entries.push({
       url: `${base}/learn/${entry.slug}`,

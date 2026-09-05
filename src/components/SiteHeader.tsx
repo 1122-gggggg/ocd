@@ -229,6 +229,14 @@ export function SiteHeader({
           >
             學習資源區
           </Link>
+          <Link
+            href="/self-help"
+            className={`btn btn-ghost btn-sm ${
+              pathname?.startsWith("/self-help") ? "text-accent font-medium bg-accent-soft" : ""
+            }`}
+          >
+            自救專區
+          </Link>
         </nav>
         <div className="flex-1" />
 
@@ -362,6 +370,9 @@ export function SiteHeader({
               <div className="border-t border-line pt-3 flex flex-wrap gap-2">
                 <Link href="/learn" className="btn btn-secondary btn-sm">
                   學習資源區
+                </Link>
+                <Link href="/self-help" className="btn btn-secondary btn-sm">
+                  自救專區
                 </Link>
                 <Link href="/boards/apply" className="btn btn-secondary btn-sm">
                   申請開版

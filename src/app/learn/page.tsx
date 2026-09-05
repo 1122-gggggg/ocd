@@ -6,6 +6,7 @@ import { entries as symptomsB } from "@/data/learn/symptoms-b";
 import { entries as symptomsC } from "@/data/learn/symptoms-c";
 import { entries as treatmentsA } from "@/data/learn/treatments-a";
 import { entries as treatmentsB } from "@/data/learn/treatments-b";
+import { entries as treatmentsC } from "@/data/learn/treatments-c";
 import { entries as clinicsNorth } from "@/data/learn/clinics-north";
 import { entries as clinicsCentral } from "@/data/learn/clinics-central";
 import { entries as clinicsSouth } from "@/data/learn/clinics-south";
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
 const symptoms = [...symptomsA, ...symptomsB, ...symptomsC].filter(
   (e) => e.group === "SYMPTOM",
 );
-const treatments = [...treatmentsA, ...treatmentsB].filter(
+const treatments = [...treatmentsA, ...treatmentsB, ...treatmentsC].filter(
   (e) => e.group === "TREATMENT",
 );
 const clinicCount =
