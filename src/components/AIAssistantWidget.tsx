@@ -8,6 +8,13 @@ import {
   AssistantAnalysisResult,
 } from "@/app/actions/ocd-engine";
 
+// 陪伴預設語：純前端填入輸入框，免登入可用（不觸碰任何後端）
+const COMPANION_PRESETS = [
+  "我腦袋一直逼我確認，停不下來，可以陪我一下嗎？",
+  "我很焦慮，一直想查資料求一個保證",
+  "我剛剛抵抗了一次強迫衝動，想被陪一下",
+];
+
 export function AIAssistantWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -120,6 +127,23 @@ export function AIAssistantWidget() {
               💡 <strong>非醫療診斷・不提供「你一定沒事」的保證</strong>
               <br />
               此助手陪伴你辨認強迫警報（Trigger → Obsession → Anxiety → Compulsion）並練習耐受不確定性。
+            </div>
+
+            {/* 陪伴預設語：純前端填入，免登入可用 */}
+            <div className="flex flex-wrap gap-1.5">
+              {COMPANION_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => {
+                    setInput(preset);
+                    setError(null);
+                  }}
+                  className="px-2.5 py-1 rounded-full bg-surface border border-line hover:border-accent hover:text-accent transition-colors text-[0.7rem] text-fg text-left"
+                >
+                  {preset}
+                </button>
+              ))}
             </div>
 
             {/* Input form */}
@@ -282,8 +306,8 @@ export function AIAssistantWidget() {
                   </Link>
                 </div>
 
-                {/* Feedback Loop (Phase 17) */}
-                {result.interactionId && (
+                {/* Feedback Loop (Phase 17)：需登入才顯示；未登入僅顯示引導（分析本身免登入，僅回饋需登入） */}
+                {result.interactionId ? (
                   <div className="pt-2 border-t border-line/40 flex items-center justify-between text-[0.7rem] text-muted">
                     <span>這個辨認與導引有幫助嗎？</span>
                     {feedbackSent ? (
@@ -308,6 +332,13 @@ export function AIAssistantWidget() {
                         </button>
                       </div>
                     )}
+                  </div>
+                ) : (
+                  <div className="pt-2 border-t border-line/40 flex items-center justify-between gap-2 text-[0.7rem] text-muted">
+                    <span>登入後可以留下回饋，陪我們把辨認做得更貼心</span>
+                    <Link href="/login" className="shrink-0 underline hover:text-accent">
+                      登入
+                    </Link>
                   </div>
                 )}
               </div>

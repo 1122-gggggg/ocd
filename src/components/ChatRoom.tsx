@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChatMessageItem, sendChatMessage } from "@/app/actions/chat";
+import type { VictoryItem } from "@/app/actions/recovery";
 import { Avatar } from "@/components/ui";
 import { authorBadge } from "@/lib/display";
 import { CRISIS_HELP_TEXT } from "@/lib/crisis-keywords";
@@ -17,15 +18,20 @@ const SUPPORT_PRESETS = [
 export function ChatRoom({
   initialMessages,
   user,
+  victoryHighlights = [],
 }: {
   initialMessages: ChatMessageItem[];
   user: { id: string; nickname: string; memberType: string } | null;
+  /** 空廳時輪播的夥伴復原小記（最新幾則，不含分數排名） */
+  victoryHighlights?: VictoryItem[];
 }) {
   const [messages, setMessages] = useState<ChatMessageItem[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isNoAnswerNeeded, setIsNoAnswerNeeded] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
+  const [victoryIndex, setVictoryIndex] = useState(0);
   const [crisisAlert, setCrisisAlert] = useState<string | null>(null);
   const [inlineIntervention, setInlineIntervention] = useState<{
     type: string;
@@ -175,13 +181,31 @@ export function ChatRoom({
     setTimerActive(true);
   };
 
+  const handlePresetClick = (text: string) => {
+    if (user) {
+      setInput(text);
+      setError(null);
+      setNeedsLogin(false);
+    } else {
+      // 未登入：預設語照常可看可點，點了給溫柔的登入引導
+      setError("登入後才能把話留給大家，登入只要30秒");
+      setNeedsLogin(true);
+    }
+  };
+
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!user) return;
+    if (!user) {
+      // 未登入：後端維持 UNAUTHORIZED，前端僅顯示溫柔引導
+      setError("登入後才能把話留給大家，登入只要30秒");
+      setNeedsLogin(true);
+      return;
+    }
     const trimmed = input.trim();
     if (!trimmed || sending) return;
 
     setError(null);
+    setNeedsLogin(false);
     setSending(true);
 
     const messageContent = isNoAnswerNeeded
@@ -191,7 +215,13 @@ export function ChatRoom({
     try {
       const res = await sendChatMessage("general", messageContent);
       if (!res.ok) {
-        setError(res.message || "發送失敗");
+        if (res.code === "UNAUTHORIZED") {
+          // 登入逾時等情境：後端維持原判，前端改為溫柔版文案
+          setError("登入後才能把話留給大家，登入只要30秒");
+          setNeedsLogin(true);
+        } else {
+          setError(res.message || "發送失敗");
+        }
       } else if (res.data) {
         setMessages((prev) => [...prev, res.data!]);
         latestMessageTimeRef.current = res.data.createdAt;
@@ -307,12 +337,58 @@ export function ChatRoom({
       {/* Messages list */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted">
-            <span className="text-3xl mb-2">🌱</span>
-            <p className="font-medium text-fg">陪伴大廳已準備好</p>
-            <p className="text-xs max-w-sm mt-1">
-              說說你今天卡住的片刻，或是留下一句溫暖的「我懂、陪你撐過」。
-            </p>
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted space-y-3">
+            <span className="text-3xl">🌙</span>
+            <div className="space-y-1">
+              <p className="font-medium text-fg">現在沒人說話也沒關係</p>
+              <p className="text-xs max-w-sm leading-relaxed">
+                很多人半夜都來這裡坐一下，先好好呼吸，你已經做得很好了。
+              </p>
+            </div>
+            {/* 空廳預設語：免登入可看可點 */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-md">
+              {SUPPORT_PRESETS.slice(0, 3).map((p, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handlePresetClick(p.text)}
+                  className="shrink-0 px-2.5 py-1 rounded-full bg-surface border border-line hover:border-accent hover:text-accent transition-colors text-xs text-fg"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <Link
+              href="/recovery"
+              className="text-xs text-accent hover:underline underline-offset-4"
+            >
+              📝 不想說話也沒關係，先去記一筆 →
+            </Link>
+            {/* 夥伴復原小記輪播：只呈現最新幾則，不排名、不計分 */}
+            {victoryHighlights.length > 0 && (
+              <div className="w-full max-w-md p-3 rounded-xl bg-surface-2 border border-line text-left space-y-1.5">
+                <p className="text-[0.7rem] font-semibold text-muted">
+                  ✨ 夥伴們的復原小記
+                </p>
+                <p className="text-xs text-fg leading-relaxed whitespace-pre-wrap break-words">
+                  {victoryHighlights[victoryIndex % victoryHighlights.length]?.content}
+                </p>
+                <div className="flex items-center justify-between text-[0.7rem] text-muted">
+                  <span>
+                    — {victoryHighlights[victoryIndex % victoryHighlights.length]?.user.nickname} 的一小步
+                  </span>
+                  {victoryHighlights.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setVictoryIndex((i) => i + 1)}
+                      className="underline hover:text-accent underline-offset-4"
+                    >
+                      再看一則
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           messages.map((m) => {
@@ -382,22 +458,20 @@ export function ChatRoom({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Preset Support Chips */}
-      {user && (
-        <div className="px-3 py-2 bg-surface-2/60 border-t border-line flex items-center gap-1.5 overflow-x-auto text-xs no-scrollbar">
-          <span className="text-muted shrink-0 text-[0.75rem]">快速陪伴：</span>
-          {SUPPORT_PRESETS.map((p, idx) => (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => setInput(p.text)}
-              className="shrink-0 px-2.5 py-1 rounded-full bg-surface border border-line hover:border-accent hover:text-accent transition-colors text-xs text-fg"
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Preset Support Chips：免登入可看可點，未登入點了給溫柔引導 */}
+      <div className="px-3 py-2 bg-surface-2/60 border-t border-line flex items-center gap-1.5 overflow-x-auto text-xs no-scrollbar">
+        <span className="text-muted shrink-0 text-[0.75rem]">快速陪伴：</span>
+        {SUPPORT_PRESETS.map((p, idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => handlePresetClick(p.text)}
+            className="shrink-0 px-2.5 py-1 rounded-full bg-surface border border-line hover:border-accent hover:text-accent transition-colors text-xs text-fg"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
 
       {/* Private Inline Support Intervention (Visible only to sender) */}
       {inlineIntervention && (
@@ -442,7 +516,16 @@ export function ChatRoom({
       <div className="p-3 bg-surface border-t border-line">
         {user ? (
           <form onSubmit={handleSend} className="space-y-2">
-            {error && <p className="text-xs text-danger font-medium">{error}</p>}
+            {error && (
+              <p className="text-xs text-danger font-medium flex items-center gap-2 flex-wrap">
+                <span>{error}</span>
+                {needsLogin && (
+                  <Link href="/login" className="underline underline-offset-4 hover:opacity-80">
+                    去登入
+                  </Link>
+                )}
+              </p>
+            )}
             <div className="flex items-center justify-between text-xs text-muted">
               <label className="flex items-center gap-1.5 cursor-pointer hover:text-fg select-none">
                 <input
@@ -482,14 +565,26 @@ export function ChatRoom({
             </div>
           </form>
         ) : (
-          <div className="text-center py-2 text-xs text-muted flex items-center justify-center gap-2">
-            <span>登入後即可加入即時互助陪伴聊天室</span>
-            <Link href="/login" className="btn btn-primary btn-xs">
-              登入
-            </Link>
-            <Link href="/register" className="btn btn-ghost btn-xs">
-              註冊
-            </Link>
+          <div className="py-2 text-xs text-muted space-y-2">
+            {error && (
+              <p className="text-center text-danger font-medium flex items-center justify-center gap-2 flex-wrap">
+                <span>{error}</span>
+                {needsLogin && (
+                  <Link href="/login" className="underline underline-offset-4 hover:opacity-80">
+                    去登入
+                  </Link>
+                )}
+              </p>
+            )}
+            <div className="text-center flex items-center justify-center gap-2">
+              <span>登入後即可加入即時互助陪伴聊天室</span>
+              <Link href="/login" className="btn btn-primary btn-xs">
+                登入
+              </Link>
+              <Link href="/register" className="btn btn-ghost btn-xs">
+                註冊
+              </Link>
+            </div>
           </div>
         )}
       </div>

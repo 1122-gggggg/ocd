@@ -47,6 +47,20 @@ export interface LearnSolution {
   /** 對應本站治療法 slug（症狀頁用），治療法頁用 applicableTo 反向連結 */
   linkSlug?: string;
 }
+export type EvidenceGrade = "實證充足" | "中等" | "新興";
+
+export interface EvidenceSource {
+  label: string;
+  href: string;
+}
+
+export interface EvidenceMethod {
+  name: string;
+  grade: EvidenceGrade;
+  /** 繁中摘要：是什麼、對什麼有幫助 */
+  summaryZh: string;
+  sources: EvidenceSource[];
+}
 
 export interface LearnCase {
   title: string;
@@ -85,4 +99,6 @@ export interface LearnEntry {
   resources: LearnResource[];
   /** 連回討論區的 board slug（通常同 slug） */
   boardSlug: string;
+  /** 被驗證有效的方法（選填；實證線併入） */
+  evidence?: EvidenceMethod[];
 }

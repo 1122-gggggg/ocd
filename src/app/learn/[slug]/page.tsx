@@ -8,11 +8,13 @@ import type {
   ResourceKind,
 } from "@/data/learn/types";
 import { entries as symptomsA } from "@/data/learn/symptoms-a";
+import { LEARN_EVIDENCE } from "@/data/learn-evidence";
 import { entries as symptomsB } from "@/data/learn/symptoms-b";
 import { entries as symptomsC } from "@/data/learn/symptoms-c";
 import { entries as treatmentsA } from "@/data/learn/treatments-a";
 import { entries as treatmentsB } from "@/data/learn/treatments-b";
 import { entries as treatmentsC } from "@/data/learn/treatments-c";
+import { PATHWAY } from "@/data/pathways";
 
 const allEntries: LearnEntry[] = [
   ...symptomsA,
@@ -79,6 +81,7 @@ export default async function LearnDetailPage({
 
   const twResources = entry.resources.filter((r) => r.region === "TW");
   const intlResources = entry.resources.filter((r) => r.region === "INTL");
+  const pathway = PATHWAY[slug];
 
   return (
     <div className="space-y-6">
@@ -249,6 +252,101 @@ export default async function LearnDetailPage({
           </div>
         ))}
       </section>
+      {pathway && (
+        <section aria-labelledby="learn-pathway" className="space-y-3">
+          <h2 id="learn-pathway" className="section-title">
+            新手路徑
+          </h2>
+          <p className="text-sm text-muted leading-relaxed">
+            不知道從哪裡開始也沒關係，慢慢來，這裡有三站陪你走。
+          </p>
+          <ol className="space-y-2">
+            <li className="card card-pad space-y-1">
+              <p className="text-xs text-subtle">① 讀懂</p>
+              <Link
+                href={pathway.read.href}
+                className="text-sm font-medium text-accent underline underline-offset-2"
+              >
+                {pathway.read.label} →
+              </Link>
+            </li>
+            <li className="card card-pad space-y-1">
+              <p className="text-xs text-subtle">② 看看走過來的人</p>
+              <Link
+                href={pathway.peers.href}
+                className="text-sm font-medium text-accent underline underline-offset-2"
+              >
+                {pathway.peers.label} →
+              </Link>
+            </li>
+            <li className="card card-pad space-y-1">
+              <p className="text-xs text-subtle">③ 今晚就能做</p>
+              <Link
+                href={pathway.practice.href}
+                className="text-sm font-medium text-accent underline underline-offset-2"
+              >
+                {pathway.practice.label} →
+              </Link>
+            </li>
+          </ol>
+        </section>
+      )}
+      {/* 經嚴格文獻查核驗證之有效解方 */}
+      {LEARN_EVIDENCE[slug] && LEARN_EVIDENCE[slug].length > 0 && (
+        <section aria-labelledby="learn-evidence-section" className="space-y-4 pt-4 border-t border-line">
+          <div>
+            <h2 id="learn-evidence-section" className="section-title flex items-center gap-2">
+              <span>🔬 經研究驗證有效的方法（實證指引）</span>
+            </h2>
+            <p className="text-xs text-muted mt-0.5">
+              依大型隨機對照試驗（RCT）、統合分析與國際指引（APA / NICE / IOCDF）整理，附原始研究出處。
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {LEARN_EVIDENCE[slug].map((method, mIdx) => (
+              <div key={mIdx} className="card card-pad space-y-2 border border-line bg-surface">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-bold text-sm text-fg flex items-center gap-2">
+                    <span>{method.name}</span>
+                  </h3>
+                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                    method.grade === "實證充足"
+                      ? "bg-accent-soft text-accent"
+                      : method.grade === "中等"
+                      ? "bg-surface-3 text-fg"
+                      : "bg-surface-2 text-subtle"
+                  }`}>
+                    {method.grade}
+                  </span>
+                </div>
+                <p className="text-xs text-muted leading-relaxed">
+                  {method.summaryZh}
+                </p>
+                {method.sources && method.sources.length > 0 && (
+                  <div className="pt-1.5 border-t border-line/50 text-[0.72rem] text-subtle space-y-0.5">
+                    <span className="font-semibold block text-fg/80">參考文獻與臨床來源：</span>
+                    <ul className="space-y-0.5 list-disc list-inside">
+                      {method.sources.map((s, sIdx) => (
+                        <li key={sIdx}>
+                          <a
+                            href={s.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-accent hover:underline"
+                          >
+                            {s.label} ↗
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <Link href={`/b/${entry.boardSlug}`} className="btn btn-primary">

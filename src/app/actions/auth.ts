@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { NICKNAME_MAX, normalizeNickname } from "@/lib/nickname";
+import { COMMON_TOPICS } from "@/lib/preference-topics";
 
 // A "use server" module may only export async functions, so the nickname rules
 // live in @/lib/nickname and are re-used by both the actions and the UI.
@@ -131,6 +132,11 @@ export async function completeOnboarding(formData: FormData) {
     return { ok: false, code: "INVALID_MEMBER", message: "請選擇身分" };
   }
 
+  const topicRaw = String(formData.get("topic") ?? "").trim();
+  const topic = (COMMON_TOPICS as readonly { id: string }[]).some((t) => t.id === topicRaw)
+    ? topicRaw
+    : "";
+
   await prisma.user.update({
     where: { id: session.user.id },
     data: {
@@ -139,6 +145,18 @@ export async function completeOnboarding(formData: FormData) {
       profileComplete: true,
     },
   });
+  if (topic) {
+    await prisma.supportPreference.upsert({
+      where: { userId: session.user.id },
+      create: {
+        userId: session.user.id,
+        preferredTopics: [topic],
+      },
+      update: {
+        preferredTopics: [topic],
+      },
+    });
+  }
   try {
     await unstable_update({
       user: {
@@ -151,7 +169,7 @@ export async function completeOnboarding(formData: FormData) {
     // session update best-effort fallback
   }
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect(topic ? `/start?t=${topic}` : "/");
 }
 
 /** Change the display name at any time. No uniqueness, no character rules. */

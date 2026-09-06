@@ -4,6 +4,7 @@ import { getRecoveryData, getVictories } from "@/app/actions/recovery";
 import { RecoveryTracker } from "@/components/RecoveryTracker";
 import { VictoryWall } from "@/components/VictoryWall";
 import { Breadcrumbs } from "@/components/ui";
+import { RECOVERY_CASES, SYMPTOM_CASE_LABEL } from "@/data/recovery-cases";
 
 export const metadata = {
   title: "復原歷程與小小勝利 | 強迫症互助坊",
@@ -57,6 +58,67 @@ export default async function RecoveryPage() {
         </div>
 
         <VictoryWall initialVictories={victories} signedIn={signedIn} />
+      </section>
+
+      {/* Real Recovery Cases from Community & Clinical Sources */}
+      <section className="space-y-4 pt-4 border-t border-line">
+        <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+          <div>
+            <h2 className="text-xl font-bold text-fg flex items-center gap-2">
+              <span>📚 走過風暴的真實案例庫（含國內外實踐）</span>
+            </h2>
+            <p className="text-xs text-muted mt-0.5">
+              來自 IOCDF、NOCD、ADAA、知乎與 Reddit 康復板塊的真實抗爭與好轉記錄，每篇皆附原始連結。
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {RECOVERY_CASES.slice(0, 16).map((item, idx) => (
+            <div key={idx} className="card card-pad space-y-2.5 border border-line flex flex-col justify-between">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="badge badge-accent">
+                    {SYMPTOM_CASE_LABEL[item.symptom] ?? item.symptom}
+                  </span>
+                  <span className="text-[0.7rem] text-subtle">{item.sourceName}</span>
+                </div>
+                <h3 className="font-bold text-sm text-fg leading-snug">
+                  {item.title}
+                </h3>
+                <p className="text-xs text-muted leading-relaxed">
+                  {item.summaryZh}
+                </p>
+                {item.keySteps && item.keySteps.length > 0 && (
+                  <div className="bg-surface-2/60 p-2 rounded text-[0.75rem] text-fg/90 space-y-1">
+                    <span className="font-semibold text-[0.7rem] text-accent block">關鍵好轉步驟：</span>
+                    <ul className="list-disc list-inside space-y-0.5 text-muted">
+                      {item.keySteps.slice(0, 3).map((step, sIdx) => (
+                        <li key={sIdx} className="leading-relaxed">{step}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <div className="pt-2 border-t border-line/60 flex items-center justify-between text-xs">
+                <Link
+                  href={`/b/${item.symptom}`}
+                  className="text-muted hover:text-accent transition-colors"
+                >
+                  去該版區討論 →
+                </Link>
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline flex items-center gap-1 font-medium"
+                >
+                  閱讀原始文章 ↗
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* Personal Recovery Tracker & Log */}

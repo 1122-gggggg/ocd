@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { getChatMessages } from "@/app/actions/chat";
+import { getVictories } from "@/app/actions/recovery";
 import { ChatRoom } from "@/components/ChatRoom";
 import { Breadcrumbs } from "@/components/ui";
 
@@ -20,6 +21,7 @@ export default async function ChatPage() {
   } | null;
 
   const messages = await getChatMessages("general", 50);
+  const victories = await getVictories(3);
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
@@ -41,6 +43,7 @@ export default async function ChatPage() {
 
       <ChatRoom
         initialMessages={messages}
+        victoryHighlights={victories}
         user={
           session?.user
             ? {

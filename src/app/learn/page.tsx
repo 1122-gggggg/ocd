@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { FamilyGuide } from "@/components/FamilyGuide";
 import { Breadcrumbs, PageHeader } from "@/components/ui";
 import { entries as symptomsA } from "@/data/learn/symptoms-a";
 import { entries as symptomsB } from "@/data/learn/symptoms-b";
@@ -47,6 +48,8 @@ export default function LearnIndexPage() {
       <p className="text-xs text-subtle leading-relaxed">
         本區內容僅供學習與經驗交流，不是醫療診斷或處方；若困擾持續影響生活，請諮詢精神科、身心科或心理專業人員。
       </p>
+
+      <FamilyGuide />
 
       <section aria-labelledby="learn-symptoms" className="space-y-3">
         <h2 id="learn-symptoms" className="section-title">

@@ -3,6 +3,7 @@ import { completeOnboarding } from "@/app/actions/auth";
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
+import { COMMON_TOPICS } from "@/lib/preference-topics";
 
 export const metadata: Metadata = { title: "完成個人資料" };
 
@@ -22,8 +23,8 @@ export default async function OnboardingPage() {
     <div className="container-narrow">
       <div className="card card-pad space-y-5">
         <header className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">再兩件事就好</h1>
-          <p className="text-sm text-muted">設定你的暱稱和身分，就可以開始使用論壇。</p>
+          <h1 className="text-2xl font-bold tracking-tight">再三件事就好</h1>
+          <p className="text-sm text-muted">設定你的暱稱、身分，和最近卡住你的主題，就可以開始了。</p>
         </header>
 
         <form action={completeOnboarding as unknown as string} className="space-y-4">
@@ -58,6 +59,22 @@ export default async function OnboardingPage() {
               <option value="FAMILY">家屬</option>
               <option value="CLINICIAN">臨床工作者</option>
             </select>
+          </div>
+          <div>
+            <label className="label" htmlFor="ob-topic">
+              最近卡你的是哪一種？
+            </label>
+            <select id="ob-topic" name="topic" defaultValue="" className="select">
+              <option value="">先跳過</option>
+              {COMMON_TOPICS.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <p className="hint">
+              選一個最貼近的就好，我們會幫你找到和你一樣的人。之後隨時可以改，也可以先跳過。
+            </p>
           </div>
 
           <button type="submit" className="btn btn-primary btn-block btn-lg">

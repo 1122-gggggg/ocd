@@ -7,6 +7,8 @@ import { publicAuthorLabel } from "@/lib/display";
 import { AuthorMeta, EmptyState, GROUP_LABELS, Pagination } from "@/components/ui";
 import { getBoardPosts, type BoardSort } from "@/lib/cache";
 import { shouldHidePost } from "@/lib/preferences-filter";
+import { getRescuePosts } from "@/lib/rescue";
+import { formatRelative } from "@/lib/format";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -94,11 +96,12 @@ export default async function BoardPage({
 
   // Round 2: count + list in parallel (skip uses requestedPage; Pagination
   // display still clamps to totalPages below).
-  const [total, posts] = await Promise.all([
+  const [total, posts, rescuePosts] = await Promise.all([
     prisma.post.count({
       where: { boardId: board.id, deletedAt: null },
     }),
     getBoardPosts(board.id, sort, requestedPage),
+    getRescuePosts(board.id),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / BOARD_PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
@@ -152,7 +155,35 @@ export default async function BoardPage({
             </div>
           </details>
         )}
+
       </section>
+
+      {rescuePosts.length > 0 && (
+        <section className="card card-pad space-y-3" aria-label="等一個懂的人">
+          <div className="space-y-1">
+            <h2 className="section-title">等一個懂的人</h2>
+            <p className="text-sm text-muted leading-relaxed">
+              這些文章超過一天還沒有人回應。如果你剛好懂，留一句話陪他好嗎？
+            </p>
+          </div>
+          <ul className="space-y-2">
+            {rescuePosts.map((p) => (
+              <li key={p.id}>
+                <Link
+                  href={`/b/${slug}/p/${p.id}`}
+                  className="card card-link p-4 flex items-center gap-3"
+                >
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <p className="font-medium text-fg name-clip">{p.title}</p>
+                    <p className="text-xs text-subtle">{formatRelative(p.createdAt)}・還沒有人回應</p>
+                  </div>
+                  <span className="btn btn-secondary btn-sm shrink-0">去回第一句</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Thread list */}
       <section className="space-y-3">

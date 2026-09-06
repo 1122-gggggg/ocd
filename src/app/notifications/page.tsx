@@ -17,6 +17,7 @@ const KIND_LABEL: Record<string, string> = {
   CLINICIAN_APPROVED: "臨床身分已通過驗證",
   CLINICIAN_REJECTED: "臨床身分審核結果",
   REPORT_RESOLVED: "舉報處理結果",
+  RESCUE: "等一個懂的人",
 };
 
 type NotificationRow = {
