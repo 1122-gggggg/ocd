@@ -1,6 +1,7 @@
 import { PrismaClient, BoardGroup } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
+import { REDDIT_CASES } from "../src/data/reddit-cases";
 const prisma = new PrismaClient();
 
 const DISCLAIMER =
@@ -249,6 +250,26 @@ async function main() {
           isAnonymous: false,
         },
       });
+    }
+  }
+
+  for (const c of REDDIT_CASES) {
+    const targetBoard = await prisma.board.findUnique({ where: { slug: c.boardSlug } });
+    if (targetBoard) {
+      const existing = await prisma.post.findFirst({
+        where: { boardId: targetBoard.id, title: c.title },
+      });
+      if (!existing) {
+        await prisma.post.create({
+          data: {
+            boardId: targetBoard.id,
+            authorId: admin.id,
+            title: c.title,
+            bodyMd: `${c.bodyMd}\n\n---\n**原案討論來源**：${c.redditSource}`,
+            isAnonymous: false,
+          },
+        });
+      }
     }
   }
 

@@ -75,6 +75,7 @@ model User {
   boardApplications    BoardApplication[]
   clinicianApplication ClinicianApplication?
   reports              Report[]
+  chatMessages         ChatMessage[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -223,4 +224,16 @@ model Report {
   @@index([status, createdAt])
   @@index([targetType, targetId])
   @@index([reporterId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  channel   String   @default("general")
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([channel, createdAt])
+  @@index([senderId, createdAt])
 }
