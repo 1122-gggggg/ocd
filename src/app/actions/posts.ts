@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { canCreatePost, canReply } from "@/lib/permissions";
 import { containsCrisisKeyword } from "@/lib/crisis-keywords";
+import { runSupportPipeline } from "@/lib/support/pipeline";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
@@ -42,8 +43,24 @@ export async function createPost(
   if (!bodyMd || bodyMd.length > 20000) {
     return { ok: false, code: "INVALID_BODY", message: "正文 1-20000 字" };
   }
-  if (containsCrisisKeyword(bodyMd) && confirmCrisis !== "1") {
-    return { ok: false, code: "CRISIS_CONFIRM", message: "請確認已閱讀求助資源" };
+  const pipelineResult = await runSupportPipeline({
+    sourceType: "POST",
+    userId: user.id,
+    text: `${title}\n\n${bodyMd}`,
+    context: {
+      boardSlug,
+      postSupportMode: supportMode,
+      isAnonymous,
+    },
+    logInteraction: false,
+  });
+
+  if (pipelineResult.safety.isCrisis && confirmCrisis !== "1") {
+    return {
+      ok: false,
+      code: "CRISIS_CONFIRM",
+      message: pipelineResult.safety.guidanceText || "請確認已閱讀求助資源",
+    };
   }
   const board = await prisma.board.findUnique({ where: { slug: boardSlug }, select: { id: true, status: true, slug: true } });
   if (!board) return { ok: false, code: "BOARD_NOT_FOUND" };
@@ -62,6 +79,19 @@ export async function createPost(
       isAnonymous,
       supportMode,
     },
+  });
+
+  await runSupportPipeline({
+    sourceType: "POST",
+    sourceId: post.id,
+    userId: user.id,
+    text: `${title}\n\n${bodyMd}`,
+    context: {
+      boardSlug,
+      postSupportMode: supportMode,
+      isAnonymous,
+    },
+    logInteraction: true,
   });
   revalidatePath(`/b/${boardSlug}`);
   revalidatePath(`/b/${boardSlug}/p/${post.id}`);
@@ -112,11 +142,33 @@ export async function createReply(
     select: {
       id: true,
       boardId: true,
+      title: true,
+      supportMode: true,
       deletedAt: true,
       board: { select: { slug: true, status: true } },
     },
   });
   if (!post) return { ok: false, code: "POST_NOT_FOUND" };
+
+  const pipelineResult = await runSupportPipeline({
+    sourceType: "REPLY",
+    userId: user.id,
+    text: bodyMd,
+    context: {
+      parentPostTitle: post.title,
+      parentPostSupportMode: post.supportMode,
+      isAnonymous,
+    },
+    logInteraction: false,
+  });
+
+  if (pipelineResult.safety.isCrisis && confirmCrisis !== "1") {
+    return {
+      ok: false,
+      code: "CRISIS_CONFIRM",
+      message: pipelineResult.safety.guidanceText || "請確認已閱讀求助資源",
+    };
+  }
   const can = canReply(
     user as unknown as Parameters<typeof canReply>[0],
     post.board as unknown as Parameters<typeof canReply>[1],
@@ -148,9 +200,30 @@ export async function createReply(
         },
         { isolationLevel: "Serializable" }
       );
+
+      await runSupportPipeline({
+        sourceType: "REPLY",
+        sourceId: postId,
+        userId: user.id,
+        text: bodyMd,
+        context: {
+          parentPostTitle: post.title,
+          parentPostSupportMode: post.supportMode,
+          isAnonymous,
+        },
+        logInteraction: true,
+      });
+
       revalidatePath(`/b/${post.board.slug}/p/${postId}`);
       revalidateTag("boards-home");
-      return { ok: true };
+      return {
+        ok: true,
+        message:
+          pipelineResult.intervention.type !== "NONE" &&
+          pipelineResult.intervention.severity !== "NONE"
+            ? pipelineResult.intervention.message
+            : undefined,
+      };
     } catch (e: unknown) {
       if (isPrismaP2002(e) && attempt < 2) {
         lastError = e;

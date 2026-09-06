@@ -27,6 +27,12 @@ export function ChatRoom({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [crisisAlert, setCrisisAlert] = useState<string | null>(null);
+  const [inlineIntervention, setInlineIntervention] = useState<{
+    type: string;
+    title: string;
+    message: string;
+    options?: Array<{ id: string; label: string; actionType: string }>;
+  } | null>(null);
 
   // 2-minute urge surfing / delay timer
   const [timerActive, setTimerActive] = useState(false);
@@ -113,10 +119,23 @@ export function ChatRoom({
         latestMessageTimeRef.current = res.data.createdAt;
         setInput("");
         setIsNoAnswerNeeded(false);
-        if (res.crisisHelp) {
+        if (res.intervention && (res.intervention.severity === "CRITICAL" || res.intervention.severity === "HIGH")) {
+          setCrisisAlert(res.crisisHelp || res.intervention.message);
+          setInlineIntervention(null);
+        } else if (res.crisisHelp) {
           setCrisisAlert(res.crisisHelp);
+          setInlineIntervention(null);
+        } else if (res.intervention && res.intervention.severity !== "NONE" && res.intervention.type !== "NONE") {
+          setInlineIntervention({
+            type: res.intervention.type,
+            title: res.intervention.title,
+            message: res.intervention.message,
+            options: res.intervention.options,
+          });
+          setCrisisAlert(null);
         } else {
           setCrisisAlert(null);
+          setInlineIntervention(null);
         }
       }
     } catch (err) {
@@ -299,6 +318,45 @@ export function ChatRoom({
               {p.label}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Private Inline Support Intervention (Visible only to sender) */}
+      {inlineIntervention && (
+        <div className="mx-3 mt-2 p-3 rounded-xl bg-surface-2 border border-accent/30 text-xs flex flex-col gap-1.5 animate-fadeIn">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-accent text-xs flex items-center gap-1.5">
+              <span>💡</span>
+              <span>{inlineIntervention.title}</span>
+              <span className="text-[0.65rem] px-1.5 py-0.5 rounded bg-surface-3 text-muted">
+                個人專屬提示・僅你看得見
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setInlineIntervention(null)}
+              className="text-muted hover:text-fg text-xs p-0.5"
+              aria-label="關閉提示"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-fg leading-relaxed text-[0.75rem]">{inlineIntervention.message}</p>
+          {inlineIntervention.options &&
+            inlineIntervention.options.some((o) => o.actionType === "URGE_SURFING") && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleStartTimer();
+                    setInlineIntervention(null);
+                  }}
+                  className="btn btn-secondary btn-xs"
+                >
+                  ⏳ 開啟 2 分鐘衝浪練習
+                </button>
+              </div>
+            )}
         </div>
       )}
 

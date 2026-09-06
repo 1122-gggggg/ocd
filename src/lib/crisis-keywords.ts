@@ -14,13 +14,17 @@ export const CRISIS_KEYWORDS: string[] = [
 ];
 
 export function containsCrisisKeyword(text: string): boolean {
+  if (!text) return false;
   const lower = text.toLowerCase();
   return CRISIS_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
 }
 
 export const CRISIS_HELP_TEXT = `如有危機念頭，請立即求助：
-- 衛生福利部安心專線 1925（24 小時）
-- https://www.iasp.info/suicidalthoughts/`;
+- 衛生福利部安心專線 1925（24 小時免費）
+- 緊急醫療救護請撥打 119
+- 生命線協談專線 1995
+- 張老師專線 1980
+- 國際資源：https://www.iasp.info/suicidalthoughts/`;
 
 export const DISCLAIMER_TEXT =
   "本站內容由使用者撰寫或管理員整理，僅供經驗交流，不是醫療診斷、處方或治療建議。請勿依據本站內容自行停藥或改變治療。緊急狀況請撥打 1925 或當地緊急醫療。";

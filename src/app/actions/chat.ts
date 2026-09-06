@@ -3,6 +3,8 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { containsCrisisKeyword, CRISIS_HELP_TEXT } from "@/lib/crisis-keywords";
+import { runSupportPipeline } from "@/lib/support/pipeline";
+import type { SupportIntervention } from "@/lib/support/intervention";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export type ChatMessageItem = {
@@ -29,6 +31,7 @@ export async function sendChatMessage(
   message?: string;
   data?: ChatMessageItem;
   crisisHelp?: string;
+  intervention?: SupportIntervention | null;
 }> {
   const session = (await auth()) as unknown as {
     user?: { id: string; role: string; profileComplete?: boolean };
@@ -54,9 +57,15 @@ export async function sendChatMessage(
   if (!checkRateLimit(`chat:msg:${user.id}`, 20, 60_000)) {
     return { ok: false, code: "RATE_LIMITED", message: "發送過於頻繁，請稍候再試" };
   }
+  const pipelineResult = await runSupportPipeline({
+    sourceType: "CHAT",
+    userId: user.id,
+    text: cleanContent,
+    context: { channel: cleanChannel },
+    logInteraction: false,
+  });
 
-  const isCrisis = containsCrisisKeyword(cleanContent);
-
+  const isCrisis = pipelineResult.safety.isCrisis || containsCrisisKeyword(cleanContent);
   const created = await prisma.chatMessage.create({
     data: {
       channel: cleanChannel,
@@ -76,6 +85,15 @@ export async function sendChatMessage(
     },
   });
 
+  await runSupportPipeline({
+    sourceType: "CHAT",
+    sourceId: created.id,
+    userId: user.id,
+    text: cleanContent,
+    context: { channel: cleanChannel },
+    logInteraction: true,
+  });
+
   return {
     ok: true,
     data: {
@@ -86,7 +104,12 @@ export async function sendChatMessage(
       isCrisis,
       sender: created.sender,
     },
-    crisisHelp: isCrisis ? CRISIS_HELP_TEXT : undefined,
+    crisisHelp: isCrisis ? (pipelineResult.safety.guidanceText || CRISIS_HELP_TEXT) : undefined,
+    intervention:
+      pipelineResult.intervention.type !== "NONE" &&
+      pipelineResult.intervention.severity !== "NONE"
+        ? pipelineResult.intervention
+        : null,
   };
 }
 

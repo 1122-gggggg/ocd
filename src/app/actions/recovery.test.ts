@@ -18,6 +18,12 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
       update: vi.fn(),
       findMany: vi.fn(),
     },
+    supportReaction: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
   },
 }));
 
@@ -37,7 +43,7 @@ import {
   createRecoveryGoal,
   createRecoveryLog,
   createVictory,
-  cheerVictory,
+  getVictoryReactionCounts,
 } from "./recovery";
 
 interface MockSession {
@@ -72,7 +78,6 @@ interface MockVictoryRecord {
   id: string;
   userId: string;
   content: string;
-  cheersCount: number;
   createdAt: Date;
   user: {
     id: string;
@@ -153,6 +158,38 @@ describe("Recovery Actions", () => {
 
       expect(res.ok).toBe(true);
     });
+
+    it("creates structured V2 log with urge, trigger, difficulty comparison and duration", async () => {
+      const session: MockSession = { user: { id: "u1", role: "USER" } };
+      mockAuth.mockResolvedValue(session);
+
+      mockPrisma.recoveryLog.create.mockResolvedValue({ id: "l2" });
+
+      const res = await createRecoveryLog({
+        trigger: "出門鎖門後下樓梯",
+        urge: "想要折返推拉門把五次",
+        compulsion: "折返拍照確認",
+        response: "啟動2分鐘衝浪練習，走到公車站",
+        difficultyBefore: 8,
+        difficultyAfter: 4,
+        durationSeconds: 120,
+        compulsionResisted: true,
+      });
+
+      expect(res.ok).toBe(true);
+      expect(mockPrisma.recoveryLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            trigger: "出門鎖門後下樓梯",
+            urge: "想要折返推拉門把五次",
+            compulsionResisted: true,
+            difficultyBefore: 8,
+            difficultyAfter: 4,
+            durationSeconds: 120,
+          }),
+        })
+      );
+    });
   });
 
   describe("createVictory and cheerVictory", () => {
@@ -164,7 +201,6 @@ describe("Recovery Actions", () => {
         id: "v1",
         userId: "u1",
         content: "今天想到那個念頭但沒有 Google！",
-        cheersCount: 0,
         createdAt: new Date("2026-09-06T10:00:00Z"),
         user: {
           id: "u1",
@@ -180,28 +216,16 @@ describe("Recovery Actions", () => {
       expect(res.victory?.content).toContain("沒有 Google");
     });
 
-    it("increments cheer count on victory", async () => {
-      const session: MockSession = { user: { id: "u2", role: "USER" } };
-      mockAuth.mockResolvedValue(session);
+    it("retrieves victory reaction counts via SupportReaction", async () => {
+      mockPrisma.supportReaction.findMany.mockResolvedValue([
+        { reactionType: "RESISTED", userId: "u2" },
+        { reactionType: "UNDERSTAND", userId: "u3" },
+      ]);
 
-      const fakeVictory: MockVictoryRecord = {
-        id: "v1",
-        userId: "u1",
-        content: "今天想到那個念頭但沒有 Google！",
-        cheersCount: 5,
-        createdAt: new Date("2026-09-06T10:00:00Z"),
-        user: {
-          id: "u1",
-          nickname: "小美",
-          memberType: "PATIENT",
-        },
-      };
-
-      mockPrisma.victory.update.mockResolvedValue(fakeVictory);
-
-      const res = await cheerVictory("v1");
-      expect(res.ok).toBe(true);
-      expect(res.cheersCount).toBe(5);
+      const res = await getVictoryReactionCounts("v1", "u2");
+      expect(res.RESISTED).toBe(1);
+      expect(res.UNDERSTAND).toBe(1);
+      expect(res.userReacted).toContain("RESISTED");
     });
   });
 });

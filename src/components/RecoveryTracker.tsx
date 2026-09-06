@@ -25,12 +25,19 @@ export function RecoveryTracker({
   const [savingGoal, setSavingGoal] = useState(false);
   const [goalError, setGoalError] = useState<string | null>(null);
 
-  // Log inputs
+  // 5-step guided Recovery Log inputs
   const [selectedGoalId, setSelectedGoalId] = useState<string>("");
-  const [situation, setSituation] = useState("");
+  const [trigger, setTrigger] = useState("");
+  const [urge, setUrge] = useState("");
   const [compulsion, setCompulsion] = useState("");
   const [response, setResponse] = useState("");
-  const [difficulty, setDifficulty] = useState<number>(5);
+  const [resisted, setResisted] = useState(true);
+  const [returnedToActivity, setReturnedToActivity] = useState(true);
+  const [toleratedUncertainty, setToleratedUncertainty] = useState(true);
+  const [difficultyBefore, setDifficultyBefore] = useState<number>(7);
+  const [difficultyAfter, setDifficultyAfter] = useState<number>(4);
+  const [delayedMinutes, setDelayedMinutes] = useState<number>(5);
+
   const [savingLog, setSavingLog] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
   const [logSuccess, setLogSuccess] = useState(false);
@@ -67,19 +74,39 @@ export function RecoveryTracker({
 
   const handleAddLog = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!situation.trim() || savingLog) return;
+    if (!trigger.trim() || savingLog) return;
 
     setSavingLog(true);
     setLogError(null);
     setLogSuccess(false);
 
     try {
+      const durationSeconds = delayedMinutes > 0 ? delayedMinutes * 60 : null;
+
+      // Compose rich response summary that includes recovery dimensions
+      const recoveryTags: string[] = [];
+      if (resisted) recoveryTags.push("成功抵抗強迫");
+      if (returnedToActivity) recoveryTags.push("重回當下生活");
+      if (toleratedUncertainty) recoveryTags.push("接納耐受不確定");
+
+      const fullResponse = [
+        response.trim(),
+        recoveryTags.length > 0 ? `【復原實踐：${recoveryTags.join("・")}】` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
       const res = await createRecoveryLog({
         goalId: selectedGoalId || undefined,
-        situation,
-        compulsion,
-        response,
-        difficulty,
+        situation: trigger.trim(),
+        trigger: trigger.trim(),
+        urge: urge.trim() || undefined,
+        compulsion: compulsion.trim() || undefined,
+        response: fullResponse || undefined,
+        difficultyBefore,
+        difficultyAfter,
+        durationSeconds: durationSeconds || undefined,
+        compulsionResisted: resisted,
       });
 
       if (!res.ok) {
@@ -89,15 +116,22 @@ export function RecoveryTracker({
         const newLog: RecoveryLogItem = {
           id: String(Date.now()),
           goalId: selectedGoalId || null,
-          situation,
-          compulsion: compulsion || null,
-          response: response || null,
-          difficulty,
+          situation: trigger.trim(),
+          trigger: trigger.trim(),
+          urge: urge.trim() || null,
+          compulsion: compulsion.trim() || null,
+          response: fullResponse || null,
+          difficulty: difficultyBefore,
+          difficultyBefore,
+          difficultyAfter,
+          durationSeconds: durationSeconds || null,
+          compulsionResisted: resisted,
           createdAt: new Date().toISOString(),
           goalTitle: goals.find((g) => g.id === selectedGoalId)?.title,
         };
         setLogs((prev) => [newLog, ...prev]);
-        setSituation("");
+        setTrigger("");
+        setUrge("");
         setCompulsion("");
         setResponse("");
         setTimeout(() => setLogSuccess(false), 3000);
@@ -124,58 +158,71 @@ export function RecoveryTracker({
           </div>
         </div>
 
-        {/* Add goal form */}
-        <form onSubmit={handleAddGoal} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {goalError && <p className="col-span-full text-xs text-danger">{goalError}</p>}
-          <input
-            type="text"
-            value={newGoalTitle}
-            onChange={(e) => setNewGoalTitle(e.target.value)}
-            placeholder="目標名稱（例：出門只確認一次瓦斯）"
-            className="input text-xs sm:text-sm"
-            disabled={savingGoal}
-          />
-          <input
-            type="text"
-            value={newGoalTarget}
-            onChange={(e) => setNewGoalTarget(e.target.value)}
-            placeholder="期望成果（例：不再錄影與折返）"
-            className="input text-xs sm:text-sm"
-            disabled={savingGoal}
-          />
-          <button
-            type="submit"
-            disabled={savingGoal || !newGoalTitle.trim()}
-            className="btn btn-primary btn-sm"
-          >
-            {savingGoal ? "建立中…" : "新增復原目標"}
-          </button>
+        <form onSubmit={handleAddGoal} className="space-y-2 pt-2">
+          {goalError && <p className="text-xs text-danger">{goalError}</p>}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={newGoalTitle}
+              onChange={(e) => setNewGoalTitle(e.target.value)}
+              placeholder="目標名稱 (例：出門鎖門後不折返檢查、摸門把後正常吃飯)"
+              className="input text-xs sm:text-sm flex-1"
+              required
+              maxLength={100}
+            />
+            <input
+              type="text"
+              value={newGoalTarget}
+              onChange={(e) => setNewGoalTarget(e.target.value)}
+              placeholder="具體行動 (例：每天練習一次衝動衝浪 2 分鐘)"
+              className="input text-xs sm:text-sm flex-1"
+              maxLength={200}
+            />
+            <button
+              type="submit"
+              disabled={savingGoal || !newGoalTitle.trim()}
+              className="btn btn-primary btn-sm shrink-0"
+            >
+              {savingGoal ? "新增中…" : "新增目標"}
+            </button>
+          </div>
         </form>
 
-        {/* Goal list */}
         <div className="space-y-2 pt-2">
           {goals.length === 0 ? (
-            <p className="text-xs text-muted py-2">尚未建立目標。立下第一個小小的生活奪回目標吧！</p>
+            <p className="text-xs text-muted">目前尚無進行中的復原目標。</p>
           ) : (
             goals.map((g) => (
               <div
                 key={g.id}
-                className={`p-3 rounded-xl border flex items-center justify-between transition-colors ${
+                className={`card p-3 flex items-center justify-between gap-2 border ${
                   g.active
                     ? "bg-surface border-line"
-                    : "bg-surface-2/60 border-line/40 text-muted opacity-60"
+                    : "bg-surface-2/60 border-line/40 opacity-75"
                 }`}
               >
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className={`font-semibold text-sm ${g.active ? "text-fg" : "line-through"}`}>
+                    <span
+                      className={`text-sm font-semibold ${
+                        g.active ? "text-fg" : "text-muted line-through"
+                      }`}
+                    >
                       {g.title}
                     </span>
-                    <span className="text-[0.7rem] px-2 py-0.5 rounded-full bg-surface-3">
-                      {g.active ? "進行中" : "已達成"}
+                    <span
+                      className={`text-[0.7rem] px-1.5 py-0.5 rounded-full font-medium ${
+                        g.active
+                          ? "bg-accent-soft text-accent"
+                          : "bg-surface-3 text-muted"
+                      }`}
+                    >
+                      {g.active ? "進行中" : "已達成 / 暫停"}
                     </span>
                   </div>
-                  {g.target && <p className="text-xs text-muted">{g.target}</p>}
+                  {g.target && (
+                    <p className="text-xs text-muted">{g.target}</p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -190,26 +237,31 @@ export function RecoveryTracker({
         </div>
       </section>
 
-      {/* 2. Daily Non-Compulsion Check-in */}
+      {/* 2. Structured Recovery Flow V2 */}
       <section className="card card-pad space-y-4">
         <div>
-          <h2 className="text-lg font-bold text-fg flex items-center gap-2">
-            <span>📝 每日非強迫日記 (Daily Exposure Log)</span>
-          </h2>
-          <p className="text-xs text-muted">
-            重點不是「今天焦慮幾分」，而是「今天我做了什麼，即使焦慮存在，我仍然繼續生活？」
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-fg flex items-center gap-2">
+              <span>📝 每日非強迫日記 (Exposure & Response Prevention Log)</span>
+            </h2>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft text-accent font-medium">
+              V2 五步奪回生活法
+            </span>
+          </div>
+          <p className="text-xs text-muted mt-1 leading-relaxed">
+            復原的成功標準不是「焦慮有沒有下降」，而是「即使懷疑還在，你有沒有忍住強迫、耐受不確定並重回生活」。
           </p>
         </div>
 
-        <form onSubmit={handleAddLog} className="space-y-3">
+        <form onSubmit={handleAddLog} className="space-y-4 pt-2">
           {logError && <p className="text-xs text-danger">{logError}</p>}
           {logSuccess && (
-            <p className="text-xs text-accent font-medium">✨ 記錄成功！為你的堅持感到驕傲！</p>
+            <p className="text-xs text-accent font-medium">✨ 記錄成功！為每一次奪回生活的選擇感到驕傲！</p>
           )}
 
           {goals.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-fg mb-1">對應目標（選填）</label>
+              <label className="block text-xs font-medium text-fg mb-1">對應復原目標（選填）</label>
               <select
                 value={selectedGoalId}
                 onChange={(e) => setSelectedGoalId(e.target.value)}
@@ -225,72 +277,158 @@ export function RecoveryTracker({
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-medium text-fg mb-1">
-              1. 今天 OCD 幫我製造了什麼情境或懷疑？ <span className="text-danger">*</span>
+          {/* Step 1 */}
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-fg">
+              1. 今天發生了什麼？（誘發情境 / 刺激） <span className="text-danger">*</span>
             </label>
             <input
               type="text"
-              value={situation}
-              onChange={(e) => setSituation(e.target.value)}
-              placeholder="例：出門鎖上門後，腦袋瘋狂大叫「剛才門一定沒鎖好，房子會遭小偷」"
+              value={trigger}
+              onChange={(e) => setTrigger(e.target.value)}
+              placeholder="例：出門鎖上門後走下樓梯、碰了外面的門把、腦中突然閃過一個傷害別人的畫面…"
               className="input text-xs sm:text-sm"
               required
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-fg mb-1">
-              2. 當時腦袋逼迫我想做的「強迫行為」是什麼？
+          {/* Step 2 */}
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-fg">
+              2. 我產生了什麼衝動？（大腦強迫警報）
+            </label>
+            <input
+              type="text"
+              value={urge}
+              onChange={(e) => setUrge(e.target.value)}
+              placeholder="例：大腦瘋狂叫囂「門沒鎖好會遭小偷！現在馬上回頭看五次拍照存證！」"
+              className="input text-xs sm:text-sm"
+            />
+          </div>
+
+          {/* Step 3 */}
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-fg">
+              3. 我原本想做什麼強迫行為？（習慣性迴避或核對）
             </label>
             <input
               type="text"
               value={compulsion}
               onChange={(e) => setCompulsion(e.target.value)}
-              placeholder="例：想要立刻折返回去推拉門把 5 次，並拍照存證"
+              placeholder="例：折返回家推拉門把 3 次、瘋狂 Google「這症狀會不會死」、逼問另一半我愛不愛他…"
               className="input text-xs sm:text-sm"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-fg mb-1">
-              3. 即使焦慮存在，我最後做了什麼回應？
+          {/* Step 4 */}
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-fg">
+              4. 我做了什麼不同的選擇？（非強迫應對 / 衝浪練習）
             </label>
             <textarea
               value={response}
               onChange={(e) => setResponse(e.target.value)}
-              placeholder="例：我啟動了 2 分鐘衝浪計時，握著拳頭走到公車站，允許心跳加速，沒有回頭確認。"
+              placeholder="例：啟動衝動衝浪練習，握著拳頭繼續走向公車站，允許心跳加速與不確定性存在，沒有回頭檢查。"
               rows={2}
               className="input text-xs sm:text-sm py-1.5 resize-none"
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            <div className="flex items-center gap-3">
-              <label className="text-xs font-medium text-fg shrink-0">
-                面對焦慮的挑戰難度（1-10分）：
+          {/* Step 5 */}
+          <div className="space-y-2 p-3 bg-surface-2/60 rounded-xl border border-line">
+            <span className="block text-xs font-semibold text-fg">
+              5. 過了一段時間後怎樣？（復原成功指標評估）
+            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer bg-surface p-2 rounded-lg border border-line">
+                <input
+                  type="checkbox"
+                  checked={resisted}
+                  onChange={(e) => setResisted(e.target.checked)}
+                  className="rounded border-line text-accent focus:ring-accent"
+                />
+                <span className="font-medium">🛡️ 成功抵抗強迫行為</span>
               </label>
-              <div className="flex items-center gap-2">
+
+              <label className="flex items-center gap-2 cursor-pointer bg-surface p-2 rounded-lg border border-line">
+                <input
+                  type="checkbox"
+                  checked={returnedToActivity}
+                  onChange={(e) => setReturnedToActivity(e.target.checked)}
+                  className="rounded border-line text-accent focus:ring-accent"
+                />
+                <span className="font-medium">🌱 帶著焦慮重回生活</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer bg-surface p-2 rounded-lg border border-line">
+                <input
+                  type="checkbox"
+                  checked={toleratedUncertainty}
+                  onChange={(e) => setToleratedUncertainty(e.target.checked)}
+                  className="rounded border-line text-accent focus:ring-accent"
+                />
+                <span className="font-medium">🌊 耐受不確定性</span>
+              </label>
+            </div>
+
+            {/* Slider comparison & delay time */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[0.7rem] text-muted">
+                  <span>剛觸發時困難度</span>
+                  <span className="font-mono font-bold text-accent">{difficultyBefore} 分</span>
+                </div>
                 <input
                   type="range"
                   min="1"
                   max="10"
-                  value={difficulty}
-                  onChange={(e) => setDifficulty(parseInt(e.target.value, 10))}
-                  className="accent-accent"
+                  value={difficultyBefore}
+                  onChange={(e) => setDifficultyBefore(parseInt(e.target.value, 10))}
+                  className="w-full accent-accent"
                 />
-                <span className="font-mono font-bold text-xs text-accent px-2 py-0.5 rounded bg-accent-soft">
-                  {difficulty} 分
-                </span>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[0.7rem] text-muted">
+                  <span>耐受一段時間後感受</span>
+                  <span className="font-mono font-bold text-accent">{difficultyAfter} 分</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={difficultyAfter}
+                  onChange={(e) => setDifficultyAfter(parseInt(e.target.value, 10))}
+                  className="w-full accent-accent"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[0.7rem] text-muted">
+                  <span>延遲或耐受時間</span>
+                  <span className="font-mono font-bold text-accent">{delayedMinutes} 分鐘</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="60"
+                  step="1"
+                  value={delayedMinutes}
+                  onChange={(e) => setDelayedMinutes(parseInt(e.target.value, 10))}
+                  className="w-full accent-accent"
+                />
               </div>
             </div>
+          </div>
 
+          <div className="flex justify-end pt-1">
             <button
               type="submit"
-              disabled={savingLog || !situation.trim()}
-              className="btn btn-primary btn-sm"
+              disabled={savingLog || !trigger.trim()}
+              className="btn btn-primary btn-sm px-5"
             >
-              {savingLog ? "儲存中…" : "儲存今日日記"}
+              {savingLog ? "儲存中…" : "儲存今日復原日記"}
             </button>
           </div>
         </form>
@@ -306,16 +444,26 @@ export function RecoveryTracker({
             logs.map((l) => (
               <div
                 key={l.id}
-                className="card p-3 bg-surface border border-line space-y-2 text-xs"
+                className="card p-3 bg-surface border border-line space-y-2.5 text-xs"
               >
                 <div className="flex items-center justify-between text-muted border-b border-line/40 pb-1.5">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-fg">
-                      {l.goalTitle ? `🎯 ${l.goalTitle}` : "🌱 日常面對"}
+                      {l.goalTitle ? `🎯 ${l.goalTitle}` : "🌱 復原微步"}
                     </span>
-                    {l.difficulty && (
-                      <span className="px-1.5 py-0.5 rounded bg-surface-3 text-[0.7rem] text-accent font-medium">
-                        難度 {l.difficulty}/10
+                    {l.compulsionResisted && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-accent-soft text-accent text-[0.7rem] font-medium">
+                        🛡️ 抵抗強迫成功
+                      </span>
+                    )}
+                    {l.difficultyBefore && (
+                      <span className="px-1.5 py-0.5 rounded bg-surface-3 text-[0.7rem] text-muted font-mono">
+                        難度 {l.difficultyBefore} → {l.difficultyAfter ?? l.difficulty ?? "?"} / 10
+                      </span>
+                    )}
+                    {l.durationSeconds && (
+                      <span className="px-1.5 py-0.5 rounded bg-surface-3 text-[0.7rem] text-muted font-mono">
+                        ⏳ 耐受 {Math.round(l.durationSeconds / 60)} 分鐘
                       </span>
                     )}
                   </div>
@@ -324,21 +472,27 @@ export function RecoveryTracker({
                   </time>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                   <div>
-                    <span className="text-muted block text-[0.7rem]">觸發懷疑</span>
-                    <p className="text-fg mt-0.5">{l.situation}</p>
+                    <span className="text-muted block text-[0.7rem]">1. 觸發情境</span>
+                    <p className="text-fg mt-0.5 font-medium">{l.trigger || l.situation}</p>
                   </div>
+                  {l.urge && (
+                    <div>
+                      <span className="text-muted block text-[0.7rem]">2. 強迫衝動</span>
+                      <p className="text-danger mt-0.5">{l.urge}</p>
+                    </div>
+                  )}
                   {l.compulsion && (
                     <div>
-                      <span className="text-muted block text-[0.7rem]">強迫衝動</span>
-                      <p className="text-danger mt-0.5">{l.compulsion}</p>
+                      <span className="text-muted block text-[0.7rem]">3. 原想做的行為</span>
+                      <p className="text-muted mt-0.5 line-through">{l.compulsion}</p>
                     </div>
                   )}
                   {l.response && (
-                    <div>
-                      <span className="text-muted block text-[0.7rem]">我的應對 (奪回生活)</span>
-                      <p className="text-accent font-medium mt-0.5">{l.response}</p>
+                    <div className="sm:col-span-1">
+                      <span className="text-muted block text-[0.7rem]">4. 我的不同選擇</span>
+                      <p className="text-accent font-medium mt-0.5 whitespace-pre-wrap">{l.response}</p>
                     </div>
                   )}
                 </div>

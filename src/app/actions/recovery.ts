@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
+import { getTargetReactions, SupportReactionCounts } from "@/app/actions/reactions";
 
 export interface RecoveryGoalItem {
   id: string;
@@ -16,10 +17,16 @@ export interface RecoveryGoalItem {
 export interface RecoveryLogItem {
   id: string;
   goalId: string | null;
-  situation: string;
+  situation: string | null;
+  trigger: string | null;
+  urge: string | null;
   compulsion: string | null;
   response: string | null;
   difficulty: number | null;
+  difficultyBefore: number | null;
+  difficultyAfter: number | null;
+  durationSeconds: number | null;
+  compulsionResisted: boolean;
   createdAt: string;
   goalTitle?: string;
 }
@@ -27,13 +34,13 @@ export interface RecoveryLogItem {
 export interface VictoryItem {
   id: string;
   content: string;
-  cheersCount: number;
   createdAt: string;
   user: {
     id: string;
     nickname: string;
     memberType: string;
   };
+  reactionCounts?: SupportReactionCounts;
 }
 
 export async function createRecoveryGoal(
@@ -101,10 +108,16 @@ export async function toggleRecoveryGoal(
 
 export async function createRecoveryLog(data: {
   goalId?: string;
-  situation: string;
+  situation?: string;
+  trigger?: string;
+  urge?: string;
   compulsion?: string;
   response?: string;
   difficulty?: number;
+  difficultyBefore?: number;
+  difficultyAfter?: number;
+  durationSeconds?: number;
+  compulsionResisted?: boolean;
 }): Promise<{ ok: boolean; message?: string }> {
   const session = (await auth()) as unknown as { user?: { id: string } } | null;
   if (!session?.user?.id) {
@@ -115,26 +128,45 @@ export async function createRecoveryLog(data: {
     return { ok: false, message: "紀錄過於頻繁，請稍候再試" };
   }
 
-  const situation = String(data.situation ?? "").trim();
-  if (!situation || situation.length > 1000) {
-    return { ok: false, message: "情境描述需介於 1 至 1000 字" };
+  const situation = data.situation ? String(data.situation).trim().slice(0, 1000) : null;
+  const trigger = data.trigger ? String(data.trigger).trim().slice(0, 1000) : null;
+  const urge = data.urge ? String(data.urge).trim().slice(0, 1000) : null;
+
+  if (!situation && !trigger && !urge) {
+    return { ok: false, message: "請填寫情境或誘發事件" };
   }
 
   const compulsion = data.compulsion ? String(data.compulsion).trim().slice(0, 1000) : null;
   const response = data.response ? String(data.response).trim().slice(0, 1000) : null;
-  const difficulty =
-    typeof data.difficulty === "number" && data.difficulty >= 1 && data.difficulty <= 10
-      ? data.difficulty
+
+  const sanitizeRating = (val?: number) =>
+    typeof val === "number" && val >= 1 && val <= 10 ? val : null;
+
+  const difficulty = sanitizeRating(data.difficulty);
+  const difficultyBefore = sanitizeRating(data.difficultyBefore);
+  const difficultyAfter = sanitizeRating(data.difficultyAfter);
+
+  const durationSeconds =
+    typeof data.durationSeconds === "number" && data.durationSeconds >= 0
+      ? Math.min(data.durationSeconds, 86400)
       : null;
+
+  const compulsionResisted = Boolean(data.compulsionResisted);
 
   await prisma.recoveryLog.create({
     data: {
       userId: session.user.id,
       goalId: data.goalId || null,
-      situation,
+      situation: situation || trigger || "日常面對",
+      trigger,
+      urge,
       compulsion,
       response,
-      difficulty,
+      difficulty: difficulty ?? difficultyBefore,
+      difficultyBefore,
+      difficultyAfter,
+      durationSeconds,
+      compulsionResisted,
     },
   });
 
@@ -178,9 +210,15 @@ export async function getRecoveryData(): Promise<{
       id: l.id,
       goalId: l.goalId,
       situation: l.situation,
+      trigger: l.trigger,
+      urge: l.urge,
       compulsion: l.compulsion,
       response: l.response,
       difficulty: l.difficulty,
+      difficultyBefore: l.difficultyBefore,
+      difficultyAfter: l.difficultyAfter,
+      durationSeconds: l.durationSeconds,
+      compulsionResisted: l.compulsionResisted,
       createdAt: l.createdAt.toISOString(),
       goalTitle: l.goal?.title,
     })),
@@ -228,37 +266,31 @@ export async function createVictory(
     victory: {
       id: victory.id,
       content: victory.content,
-      cheersCount: victory.cheersCount,
       createdAt: victory.createdAt.toISOString(),
       user: victory.user,
+      reactionCounts: {
+        UNDERSTAND: 0,
+        HOLD_ON: 0,
+        RELATABLE: 0,
+        GRATEFUL: 0,
+        RESISTED: 0,
+        userReacted: [],
+      },
     },
   };
 }
 
-export async function cheerVictory(
-  victoryId: string
-): Promise<{ ok: boolean; cheersCount?: number; message?: string }> {
-  const session = (await auth()) as unknown as { user?: { id: string } } | null;
-  if (!session?.user?.id) {
-    return { ok: false, message: "請先登入後給予鼓勵" };
-  }
-
-  if (!checkRateLimit(`cheer:${session.user.id}:${victoryId}`, 20, 60_000)) {
-    return { ok: false, message: "點氣過於頻繁" };
-  }
-
-  const updated = await prisma.victory.update({
-    where: { id: victoryId },
-    data: { cheersCount: { increment: 1 } },
-    select: { cheersCount: true },
-  });
-
-  revalidatePath("/");
-  revalidatePath("/recovery");
-  return { ok: true, cheersCount: updated.cheersCount };
+export async function getVictoryReactionCounts(
+  victoryId: string,
+  currentUserId?: string
+): Promise<SupportReactionCounts> {
+  return getTargetReactions("VICTORY", victoryId, currentUserId);
 }
 
-export async function getVictories(limit = 10): Promise<VictoryItem[]> {
+export async function getVictories(
+  limit = 10,
+  currentUserId?: string
+): Promise<VictoryItem[]> {
   const list = await prisma.victory.findMany({
     orderBy: { createdAt: "desc" },
     take: Math.min(Math.max(limit, 1), 50),
@@ -273,11 +305,47 @@ export async function getVictories(limit = 10): Promise<VictoryItem[]> {
     },
   });
 
+  const victoryIds = list.map((v) => v.id);
+  const reactions = await prisma.supportReaction.findMany({
+    where: {
+      targetType: "VICTORY",
+      targetId: { in: victoryIds },
+    },
+    select: {
+      targetId: true,
+      reactionType: true,
+      userId: true,
+    },
+  });
+
+  const reactionMap = new Map<string, SupportReactionCounts>();
+  for (const id of victoryIds) {
+    reactionMap.set(id, {
+      UNDERSTAND: 0,
+      HOLD_ON: 0,
+      RELATABLE: 0,
+      GRATEFUL: 0,
+      RESISTED: 0,
+      userReacted: [],
+    });
+  }
+
+  for (const r of reactions) {
+    const c = reactionMap.get(r.targetId);
+    if (c) {
+      c[r.reactionType] = (c[r.reactionType] || 0) + 1;
+      if (currentUserId && r.userId === currentUserId) {
+        c.userReacted = c.userReacted || [];
+        c.userReacted.push(r.reactionType);
+      }
+    }
+  }
+
   return list.map((v) => ({
     id: v.id,
     content: v.content,
-    cheersCount: v.cheersCount,
     createdAt: v.createdAt.toISOString(),
     user: v.user,
+    reactionCounts: reactionMap.get(v.id),
   }));
 }

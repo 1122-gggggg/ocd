@@ -7,6 +7,11 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
       create: vi.fn(),
       findMany: vi.fn(),
     },
+    supportInteraction: {
+      create: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
   },
 }));
 

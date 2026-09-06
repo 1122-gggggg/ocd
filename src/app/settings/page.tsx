@@ -6,6 +6,8 @@ import type { Metadata } from "next";
 import { updateNickname } from "@/app/actions/auth";
 import { NICKNAME_MAX } from "@/lib/nickname";
 import { formatDate, initialOf } from "@/lib/format";
+import { getSupportPreference } from "@/app/actions/preferences";
+import { SupportPreferenceForm } from "@/components/SupportPreferenceForm";
 
 export const metadata: Metadata = { title: "帳號設定" };
 
@@ -38,8 +40,10 @@ export default async function SettingsPage({
   if (!session?.user?.id) redirect("/login?callbackUrl=/settings");
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user) redirect("/login");
-  const params = await searchParams;
-
+  const [params, preference] = await Promise.all([
+    searchParams,
+    getSupportPreference(user.id),
+  ]);
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <header className="flex items-center gap-4">
@@ -89,6 +93,17 @@ export default async function SettingsPage({
         <p className="hint">
           改名後，你過去的所有發文與回覆都會一起顯示新名字。頁首的名稱最多約一分鐘後同步。
         </p>
+      </section>
+
+      {/* Support & Trigger Shield Preferences */}
+      <section className="card card-pad space-y-4">
+        <div>
+          <h2 className="section-title">互助與觸發防護偏好 (Support Preferences)</h2>
+          <p className="text-xs text-muted mt-0.5">
+            設定不想看到的誘發主題、偏好的支持互動模式，打造安心低壓力的互助環境。
+          </p>
+        </div>
+        {preference && <SupportPreferenceForm initialPreference={preference} />}
       </section>
 
       {/* Account facts */}

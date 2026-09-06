@@ -8,5 +8,5 @@ export const REACTION_LABELS: Record<
   HOLD_ON: { label: "陪你一起撐", icon: "🛡️" },
   RELATABLE: { label: "我也經歷過", icon: "🌱" },
   GRATEFUL: { label: "謝謝你分享", icon: "🙏" },
-  RESISTED: { label: "今天也有做到", icon: "✨" },
+  RESISTED: { label: "為你感到驕傲", icon: "✨" },
 };

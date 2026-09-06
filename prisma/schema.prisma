@@ -123,6 +123,7 @@ model User {
   recoveryLogs         RecoveryLog[]
   victories            Victory[]
   supportReactions     SupportReaction[]
+  supportPreference    SupportPreference?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -294,6 +295,9 @@ model SupportInteraction {
   detectedType SupportDetectionType?
   confidence   Float?
   userAction   SupportAction?
+  recommendedAction String?
+  outcome           String?
+  metadata          Json?
   createdAt    DateTime              @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -321,11 +325,17 @@ model RecoveryLog {
   id         String   @id @default(cuid())
   userId     String
   goalId     String?
-  situation  String   @db.Text
-  compulsion String?  @db.Text
-  response   String?  @db.Text
-  difficulty Int?
-  createdAt  DateTime @default(now())
+  situation          String?       @db.Text
+  trigger            String?       @db.Text
+  urge               String?       @db.Text
+  compulsion         String?       @db.Text
+  response           String?       @db.Text
+  difficulty         Int?
+  difficultyBefore   Int?
+  difficultyAfter    Int?
+  durationSeconds    Int?
+  compulsionResisted Boolean       @default(false)
+  createdAt          DateTime      @default(now())
 
   user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   goal RecoveryGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
@@ -338,7 +348,6 @@ model Victory {
   id          String   @id @default(cuid())
   userId      String
   content     String   @db.Text
-  cheersCount Int      @default(0)
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -359,5 +368,21 @@ model SupportReaction {
 
   @@unique([userId, targetType, targetId, reactionType])
   @@index([targetType, targetId])
+  @@index([userId])
+}
+
+model SupportPreference {
+  id                   String          @id @default(cuid())
+  userId               String          @unique
+  preferredSupportMode PostSupportMode @default(EMPATHY)
+  hideSensitiveTopics  Boolean         @default(false)
+  preferredTopics      String[]        @default([])
+  allowPeerMatching    Boolean         @default(true)
+  showRecoveryPrompts  Boolean         @default(true)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }

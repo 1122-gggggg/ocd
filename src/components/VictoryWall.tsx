@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { VictoryItem, createVictory, cheerVictory } from "@/app/actions/recovery";
+import { VictoryItem, createVictory } from "@/app/actions/recovery";
 import { Avatar } from "@/components/ui";
+import { SupportReactions } from "@/components/SupportReactions";
 
 export function VictoryWall({
   initialVictories,
@@ -38,41 +39,23 @@ export function VictoryWall({
     }
   };
 
-  const handleCheer = async (id: string) => {
-    if (!signedIn) return;
-
-    // Optimistic cheer
-    setVictories((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, cheersCount: v.cheersCount + 1 } : v))
-    );
-
-    try {
-      await cheerVictory(id);
-    } catch {
-      // quiet fail
-    }
-  };
-
   return (
     <div className="space-y-4">
-      {/* Input box */}
+      {/* Post a Victory form */}
       {signedIn ? (
         <form onSubmit={handlePost} className="card p-3 sm:p-4 bg-surface-2/70 border border-line space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-fg flex items-center gap-1.5">
-              <span>✨ 今天，你抵抗了什麼強迫行為？</span>
-            </span>
-            <span className="text-[0.7rem] text-muted">{input.length}/500</span>
-          </div>
           {error && <p className="text-xs text-danger">{error}</p>}
+          <label className="block text-xs font-semibold text-fg">
+            分享你今天對抗強迫的一個小小勝利：
+          </label>
           <div className="flex items-end gap-2">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="例：今天想到那個可怕的念頭，但我沒有去 Google，我深呼吸去洗碗了…"
+              placeholder="例：今天洗手時腦袋叫我洗第 3 次，我深呼吸數了 30 秒，轉身離開了浴室！"
               rows={2}
               maxLength={500}
-              className="input flex-1 resize-none py-1.5 text-xs sm:text-sm"
+              className="input flex-1 text-xs py-2 leading-relaxed resize-none"
               disabled={posting}
             />
             <button
@@ -117,18 +100,25 @@ export function VictoryWall({
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-line/40 flex items-center justify-between">
-                <span className="text-[0.7rem] text-muted">拿回了一點生活</span>
-                <button
-                  type="button"
-                  disabled={!signedIn}
-                  onClick={() => handleCheer(v.id)}
-                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-accent-soft text-accent hover:bg-accent hover:text-white transition-colors"
-                  title={signedIn ? "為他感到驕傲！" : "登入後可鼓勵"}
-                >
-                  <span>❤️</span>
-                  <span className="font-mono font-bold">{v.cheersCount}</span>
-                </button>
+              <div className="pt-2 border-t border-line/40">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[0.7rem] text-muted">拿回了一點生活</span>
+                </div>
+                <SupportReactions
+                  targetType="VICTORY"
+                  targetId={v.id}
+                  initialCounts={
+                    v.reactionCounts || {
+                      UNDERSTAND: 0,
+                      HOLD_ON: 0,
+                      RELATABLE: 0,
+                      GRATEFUL: 0,
+                      RESISTED: 0,
+                      userReacted: [],
+                    }
+                  }
+                  signedIn={signedIn}
+                />
               </div>
             </div>
           ))

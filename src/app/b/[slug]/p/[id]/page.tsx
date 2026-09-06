@@ -11,6 +11,8 @@ import { ReportBox } from "@/components/ReportBox";
 import { AuthorMeta, Pagination } from "@/components/ui";
 import { SupportReactions } from "@/components/SupportReactions";
 import { getTargetReactions } from "@/app/actions/reactions";
+import { PostSupportGuidance } from "@/components/PostSupportGuidance";
+import { ReplySupportHint } from "@/components/ReplySupportHint";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -182,6 +184,7 @@ export default async function PostPage({
                   </span>
                 )}
             </div>
+            <PostSupportGuidance supportMode={post.supportMode} className="mt-2" />
 
             {isDeleted && isAdmin && (
               <p className="alert alert-error">
@@ -389,6 +392,7 @@ export default async function PostPage({
               💡 <strong>陪伴守則（支持 ≠ 保證）</strong>：發文者正在面對真實的脆弱。請避免直接回答「放心啦絕對沒事」等短暫保證（那可能強化強迫循環），
               建議使用<strong>「我懂這種痛苦」</strong>、<strong>「陪你一起撐過焦慮」</strong>來給予對方最堅實的同理同行。
             </div>
+            <ReplySupportHint parentSupportMode={post.supportMode} />
             <PostForm
               postId={id}
               action={boundReply as unknown as (formData: FormData) => Promise<void>}
