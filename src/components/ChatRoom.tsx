@@ -51,32 +51,110 @@ export function ChatRoom({
     scrollToBottom();
   }, [messages]);
 
-  // Polling for new messages every 3 seconds
+  // 即時更新：優先 EventSource SSE，失敗才回退 3s polling（避免 polling 風暴）
   useEffect(() => {
-    const interval = setInterval(async () => {
+    let stopped = false;
+    let es: EventSource | null = null;
+    let poll: NodeJS.Timeout | undefined;
+
+    const isChatMessageItem = (value: unknown): value is ChatMessageItem =>
+      !!value &&
+      typeof value === "object" &&
+      "id" in value &&
+      typeof value.id === "string" &&
+      "createdAt" in value &&
+      typeof value.createdAt === "string";
+
+    const appendIncoming = (incoming: unknown[]) => {
+      if (!incoming || incoming.length === 0) return;
+      const valid = incoming.filter(isChatMessageItem);
+      if (valid.length === 0) return;
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const newOnes = valid.filter((m) => !existingIds.has(m.id));
+        if (newOnes.length === 0) return prev;
+        const updated = [...prev, ...newOnes];
+        latestMessageTimeRef.current = updated[updated.length - 1]!.createdAt;
+        return updated;
+      });
+    };
+
+    const fetchDelta = async () => {
       try {
         const afterParam = latestMessageTimeRef.current
           ? `&after=${encodeURIComponent(latestMessageTimeRef.current)}`
           : "";
         const res = await fetch(`/api/chat?channel=general${afterParam}`);
         if (!res.ok) return;
-        const json = await res.json();
-        if (json.ok && Array.isArray(json.messages) && json.messages.length > 0) {
-          setMessages((prev) => {
-            const existingIds = new Set(prev.map((m) => m.id));
-            const newOnes = json.messages.filter((m: ChatMessageItem) => !existingIds.has(m.id));
-            if (newOnes.length === 0) return prev;
-            const updated = [...prev, ...newOnes];
-            latestMessageTimeRef.current = updated[updated.length - 1].createdAt;
-            return updated;
-          });
+        const json: unknown = await res.json();
+        if (
+          json &&
+          typeof json === "object" &&
+          "ok" in json &&
+          json.ok === true &&
+          "messages" in json &&
+          Array.isArray(json.messages)
+        ) {
+          appendIncoming(json.messages);
         }
-      } catch (e) {
+      } catch {
         // quiet fail on network blips
       }
-    }, 3000);
+    };
 
-    return () => clearInterval(interval);
+    const startPollingFallback = () => {
+      if (stopped || poll !== undefined) return;
+      poll = setInterval(fetchDelta, 3000);
+    };
+
+    if (typeof EventSource === "undefined") {
+      startPollingFallback();
+    } else {
+      try {
+        es = new EventSource(`/api/chat?channel=general&stream=1`);
+        es.onmessage = (ev: MessageEvent) => {
+          try {
+            const rawData: unknown = ev.data;
+            if (typeof rawData !== "string") return;
+            const parsed: unknown = JSON.parse(rawData);
+            if (
+              parsed &&
+              typeof parsed === "object" &&
+              "messages" in parsed &&
+              Array.isArray(parsed.messages)
+            ) {
+              appendIncoming(parsed.messages);
+            }
+          } catch {
+            // 忽略單筆解析失敗
+          }
+        };
+        es.onerror = () => {
+          try {
+            es?.close();
+          } catch {
+            // 忽略關閉失敗
+          }
+          es = null;
+          startPollingFallback();
+        };
+      } catch {
+        startPollingFallback();
+      }
+    }
+
+    return () => {
+      stopped = true;
+      try {
+        es?.close();
+      } catch {
+        // 忽略關閉失敗
+      }
+      if (poll !== undefined) {
+        clearInterval(poll);
+        poll = undefined;
+      }
+    };
   }, []);
 
   // 2-minute timer countdown

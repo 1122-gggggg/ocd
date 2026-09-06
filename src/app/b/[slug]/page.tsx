@@ -5,24 +5,25 @@ import { Markdown } from "@/lib/markdown";
 import { canCreatePost } from "@/lib/permissions";
 import { publicAuthorLabel } from "@/lib/display";
 import { AuthorMeta, EmptyState, GROUP_LABELS, Pagination } from "@/components/ui";
+import { getBoardPosts, type BoardSort } from "@/lib/cache";
+import { shouldHidePost } from "@/lib/preferences-filter";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 const BOARD_PAGE_SIZE = 20;
 
-const authorSelect = {
-  id: true,
-  nickname: true,
-  memberType: true,
-  clinicianStatus: true,
-} as const;
-
 function parsePage(value: string | string[] | undefined): number {
   const raw = Array.isArray(value) ? value[0] : value;
   const n = parseInt(raw ?? "1", 10);
   if (!Number.isFinite(n) || n < 1) return 1;
   return n;
+}
+
+function parseSort(value: string | string[] | undefined): BoardSort {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === "helpful" || raw === "solved") return raw;
+  return "recent";
 }
 
 // Shared with BoardPage via React cache(): metadata + page issue a single
@@ -53,16 +54,23 @@ export async function generateMetadata({
   return { title: board.name, description: board.description };
 }
 
+const SORT_TABS: { value: BoardSort; label: string }[] = [
+  { value: "recent", label: "最新" },
+  { value: "helpful", label: "最有用" },
+  { value: "solved", label: "已解決" },
+];
+
 export default async function BoardPage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
   const requestedPage = parsePage(sp?.page);
+  const sort = parseSort(sp?.sort);
 
   // Round 1: board + session in parallel.
   const [board, session] = await Promise.all([
@@ -77,27 +85,20 @@ export default async function BoardPage({
 
   const canPost = canCreatePost(viewer, { status: board.status, slug: board.slug });
 
+  const pref = viewer?.id
+    ? await prisma.supportPreference.findUnique({
+        where: { userId: viewer.id },
+        select: { hideSensitiveTopics: true },
+      })
+    : null;
+
   // Round 2: count + list in parallel (skip uses requestedPage; Pagination
   // display still clamps to totalPages below).
   const [total, posts] = await Promise.all([
     prisma.post.count({
       where: { boardId: board.id, deletedAt: null },
     }),
-    prisma.post.findMany({
-      where: { boardId: board.id, deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      skip: (requestedPage - 1) * BOARD_PAGE_SIZE,
-      take: BOARD_PAGE_SIZE,
-      select: {
-        id: true,
-        title: true,
-        createdAt: true,
-        isAnonymous: true,
-        authorId: true,
-        author: { select: authorSelect },
-        _count: { select: { replies: { where: { deletedAt: null } } } },
-      },
-    }),
+    getBoardPosts(board.id, sort, requestedPage),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / BOARD_PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
@@ -162,6 +163,23 @@ export default async function BoardPage({
           </span>
         </h2>
 
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="排序">
+          {SORT_TABS.map((t) => {
+            const active = sort === t.value;
+            return (
+              <Link
+                key={t.value}
+                href={`/b/${slug}?sort=${t.value}&page=1`}
+                role="tab"
+                aria-selected={active}
+                className={active ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+              >
+                {t.label}
+              </Link>
+            );
+          })}
+        </div>
+
         {posts.length === 0 ? (
           <EmptyState
             title="這個版還很安靜"
@@ -171,6 +189,18 @@ export default async function BoardPage({
         ) : (
           <ul className="space-y-2">
             {posts.map((p) => {
+              if (shouldHidePost({ title: p.title, bodyMd: p.bodyMd }, pref)) {
+                return (
+                  <li key={p.id}>
+                    <div className="card p-4 space-y-1.5">
+                      <span className="badge">依你的偏好隱藏</span>
+                      <p className="text-sm text-subtle">
+                        此篇可能包含敏感主題，已依你的偏好隱藏。
+                      </p>
+                    </div>
+                  </li>
+                );
+              }
               const { label, badge, anonymous } = publicAuthorLabel(
                 { isAnonymous: p.isAnonymous, author: p.author, authorId: p.authorId },
                 viewer
@@ -182,9 +212,23 @@ export default async function BoardPage({
                     className="card card-link p-4 group flex items-start gap-3"
                   >
                     <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="font-medium text-fg group-hover:text-accent transition-colors name-clip">
-                        {p.title}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {p.isSolved && (
+                          <span className="badge badge-accent">已解決✓</span>
+                        )}
+                        <span className="font-medium text-fg group-hover:text-accent transition-colors name-clip">
+                          {p.title}
+                        </span>
                       </div>
+                      {(p.tags?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {p.tags.map(({ tag }) => (
+                            <span key={tag.slug} className="badge">
+                              #{tag.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <AuthorMeta
                         label={label}
                         badge={badge}
@@ -193,12 +237,20 @@ export default async function BoardPage({
                         relative
                       />
                     </div>
-                    <span
-                      className="badge shrink-0 mt-0.5"
-                      title={`${p._count.replies} 則回覆`}
-                    >
-                      💬 {p._count.replies}
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-1 mt-0.5">
+                      <span
+                        className="badge"
+                        title={`${p.helpfulCount ?? 0} 人覺得有用`}
+                      >
+                        👍 {p.helpfulCount ?? 0}
+                      </span>
+                      <span
+                        className="badge"
+                        title={`${p._count.replies} 則回覆`}
+                      >
+                        💬 {p._count.replies}
+                      </span>
+                    </div>
                   </Link>
                 </li>
               );
@@ -209,7 +261,7 @@ export default async function BoardPage({
         <Pagination
           currentPage={currentPage}
           totalPages={totalPages}
-          hrefFor={(n) => `/b/${slug}?page=${n}`}
+          hrefFor={(n) => `/b/${slug}?sort=${sort}&page=${n}`}
           summary={`${total} 篇`}
         />
       </section>

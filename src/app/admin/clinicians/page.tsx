@@ -136,29 +136,53 @@ export default async function AdminCliniciansPage({
                   </dl>
 
                   <div className="text-sm">
-                    <div className="text-xs text-subtle mb-1">說明</div>
+                    <div className="text-xs text-subtle mb-1">說明（前 100 字預覽）</div>
                     <p className="leading-relaxed name-clip rounded-lg bg-surface-2 border border-line p-3">
-                      {a.statement}
+                      {a.statement.slice(0, 100)}
+                      {a.statement.length > 100 ? "…" : ""}
                     </p>
+                    {a.statement.length > 100 && (
+                      <details className="mt-1 text-xs">
+                        <summary className="cursor-pointer text-subtle hover:underline">
+                          展開全文（共 {a.statement.length} 字）
+                        </summary>
+                        <p className="mt-1 leading-relaxed rounded-lg bg-surface-2 border border-line p-3 whitespace-pre-wrap break-words">
+                          {a.statement}
+                        </p>
+                      </details>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     {a.proofPath ? (
-                      <Link
-                        href={`/admin/proof/${a.userId}`}
-                        target="_blank"
-                        className="btn btn-secondary btn-sm"
-                      >
-                        查看證明檔
-                      </Link>
+                      <>
+                        <Link
+                          href={`/admin/proof/${a.userId}`}
+                          target="_blank"
+                          className="btn btn-secondary btn-sm"
+                        >
+                          查看證明檔
+                        </Link>
+                        <a
+                          href={a.proofPath}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-accent hover:underline break-all"
+                          title={a.proofPath}
+                        >
+                          證明檔原始連結：{a.proofPath}
+                        </a>
+                      </>
                     ) : (
                       <span className="badge">無證明檔</span>
                     )}
                     <span className="text-xs text-subtle">{formatDateTime(a.createdAt)}</span>
                   </div>
-
                   {/* 審核備註兩份 textarea 分屬兩個 form：原 UI 為單一 textarea＋雙按鈕（依賴 submitter name/value，實證缺失而靜默 no-op），此處接受兩份同步問題，行為對等。 */}
                   <div className="space-y-2 border-t border-line pt-3">
+                    <p className="text-xs text-subtle">
+                      ※ 審核註記為必填：請簡述核准／駁回理由（駁回時務必填寫）。
+                    </p>
                     <form
                       action={reviewClinicianApplication as unknown as string}
                       className="flex flex-wrap gap-2"
@@ -167,7 +191,8 @@ export default async function AdminCliniciansPage({
                       <input type="hidden" name="status" value="APPROVED" />
                       <input
                         name="reviewNote"
-                        placeholder="審核備註（可空）"
+                        required
+                        placeholder="審核備註（必填，請寫明理由）"
                         aria-label="審核備註"
                         className="input flex-1 min-w-[12rem]"
                       />
@@ -183,7 +208,8 @@ export default async function AdminCliniciansPage({
                       <input type="hidden" name="status" value="REJECTED" />
                       <input
                         name="reviewNote"
-                        placeholder="審核備註（可空）"
+                        required
+                        placeholder="審核備註（必填，駁回理由務必填寫）"
                         aria-label="審核備註"
                         className="input flex-1 min-w-[12rem]"
                       />

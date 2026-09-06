@@ -143,8 +143,54 @@ export function RecoveryTracker({
     }
   };
 
+  const weekLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weekStart = (() => {
+    const now = new Date();
+    const mondayOffset = (now.getDay() + 6) % 7;
+    const monday = new Date(now);
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(now.getDate() - mondayOffset);
+    return monday;
+  })();
+  const activeWeekDays = new Set<number>(
+    logs
+      .map((l) => {
+        const d = new Date(l.createdAt);
+        if (Number.isNaN(d.getTime())) return -1;
+        d.setHours(0, 0, 0, 0);
+        return Math.round((d.getTime() - weekStart.getTime()) / 86400000);
+      })
+      .filter((diff) => diff >= 0 && diff < 7)
+  );
+
   return (
     <div className="space-y-8">
+      {/* 本週抵抗分佈：7 格點陣，有 log 即亮 */}
+      <section className="card card-pad space-y-2" aria-label="本週抵抗分佈">
+        <h2 className="text-sm font-bold text-fg">本週抵抗分佈</h2>
+        <div className="flex gap-1.5">
+          {weekLabels.map((label, idx) => {
+            const active = activeWeekDays.has(idx);
+            return (
+              <div key={label} className="flex flex-col items-center gap-1">
+                <span
+                  title={label}
+                  aria-label={`${label}${active ? "有紀錄" : "無紀錄"}`}
+                  className={`w-8 h-8 rounded-lg border flex items-center justify-center text-[0.7rem] font-semibold ${
+                    active
+                      ? "bg-accent text-white border-accent"
+                      : "bg-surface-3 text-muted border-line"
+                  }`}
+                >
+                  {label.slice(0, 1)}
+                </span>
+                <span className="text-[0.65rem] text-muted">{label}</span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted">不追求全勤，中斷也沒關係。</p>
+      </section>
       {/* 1. Recovery Goals */}
       <section className="card card-pad space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
@@ -436,7 +482,7 @@ export function RecoveryTracker({
         {/* History log entries */}
         <div className="space-y-3 pt-4 border-t border-line">
           <h3 className="text-xs font-bold text-muted uppercase tracking-wider">
-            歷史打卡紀錄（共 {logs.length} 筆）
+            歷史紀錄（共 {logs.length} 筆）
           </h3>
           {logs.length === 0 ? (
             <p className="text-xs text-muted">目前尚無日記，寫下你的第一筆吧。</p>

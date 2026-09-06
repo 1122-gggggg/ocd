@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { Markdown } from "@/lib/markdown";
 import { publicAuthorLabel } from "@/lib/display";
 import { canReply } from "@/lib/permissions";
-import { createReply, updatePost, deletePost, updateReply, deleteReply } from "@/app/actions/posts";
+import { createReply, updatePost, deletePost, updateReply, deleteReply, markSolved } from "@/app/actions/posts";
 import { PostForm } from "@/components/PostForm";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { ReportBox } from "@/components/ReportBox";
@@ -13,6 +13,8 @@ import { SupportReactions } from "@/components/SupportReactions";
 import { getTargetReactions } from "@/app/actions/reactions";
 import { PostSupportGuidance } from "@/components/PostSupportGuidance";
 import { ReplySupportHint } from "@/components/ReplySupportHint";
+import { HelpfulButton } from "@/components/HelpfulButton";
+import { ClinicianBadge } from "@/components/ClinicianBadge";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -43,6 +45,8 @@ const getPost = cache(async (id: string) =>
       boardId: true,
       authorId: true,
       supportMode: true,
+      isSolved: true,
+      solvedReplyId: true,
       title: true,
       bodyMd: true,
       isAnonymous: true,
@@ -51,6 +55,7 @@ const getPost = cache(async (id: string) =>
       deletedAt: true,
       deletedById: true,
       author: { select: authorSelect },
+      tags: { select: { tag: { select: { slug: true, name: true } } } },
     },
   })
 );
@@ -124,6 +129,52 @@ export default async function PostPage({
   ]);
   const totalPages = Math.max(1, Math.ceil(totalReplies / REPLY_PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
+  // Round 3: helpful votes for this page's replies + accepted-answer lookup
+  // (solved reply, else the first reply) for QAPage JSON-LD.
+  const replyIds = replies.map((r) => r.id);
+  const [helpfulVotes, solvedReplyRow, firstReplyRow] = await Promise.all([
+    replyIds.length > 0
+      ? prisma.helpfulVote.findMany({
+          where: { targetType: "REPLY", targetId: { in: replyIds } },
+          select: { targetId: true, userId: true },
+        })
+      : [],
+    post.solvedReplyId
+      ? prisma.reply.findUnique({
+          where: { id: post.solvedReplyId },
+          select: { bodyMd: true },
+        })
+      : null,
+    !post.solvedReplyId && totalReplies > 0
+      ? prisma.reply.findFirst({
+          where: { postId: id, deletedAt: null },
+          orderBy: { floor: "asc" },
+          select: { bodyMd: true },
+        })
+      : null,
+  ]);
+  const helpfulByReply = new Map<string, { count: number; voted: boolean }>();
+  for (const v of helpfulVotes) {
+    const entry = helpfulByReply.get(v.targetId) ?? { count: 0, voted: false };
+    entry.count += 1;
+    if (viewer?.id && v.userId === viewer.id) entry.voted = true;
+    helpfulByReply.set(v.targetId, entry);
+  }
+  const postTags = post.tags.map((t) => t.tag);
+  const acceptedBody = solvedReplyRow?.bodyMd ?? firstReplyRow?.bodyMd ?? null;
+  const qaJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "QAPage",
+    mainEntity: {
+      "@type": "Question",
+      name: post.title,
+      text: post.bodyMd.slice(0, 500),
+      answerCount: totalReplies,
+      ...(acceptedBody
+        ? { acceptedAnswer: { "@type": "Answer", text: acceptedBody.slice(0, 500) } }
+        : {}),
+    },
+  };
 
   const isAdmin = viewer?.role === "ADMIN";
   const isDeleted = !!post.deletedAt;
@@ -139,6 +190,12 @@ export default async function PostPage({
 
   return (
     <div className="space-y-6">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(qaJsonLd) }} />
+      {post.isSolved && (
+        <p role="status" className="alert alert-success">
+          ✓ 已找到方向——感謝每一位分享經驗的人，歡迎繼續補充。
+        </p>
+      )}
       <nav className="text-xs text-subtle" aria-label="麵包屑">
         <Link href="/" className="hover:text-accent">
           首頁
@@ -165,12 +222,22 @@ export default async function PostPage({
                   badge={postAuthor.badge}
                   anonymous={postAuthor.anonymous}
                   at={post.createdAt}
+                  extra={<ClinicianBadge status={post.author.clinicianStatus} />}
                 />
                 {post.updatedAt.getTime() - post.createdAt.getTime() > 1000 && (
                   <span className="badge">已編輯</span>
                 )}
                 {isDeleted && <span className="badge badge-danger">已刪除</span>}
               </div>
+              {postTags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {postTags.map((t) => (
+                    <span key={t.slug} className="badge">
+                      #{t.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </header>
 
             <div className="prose border-t border-line pt-4">
@@ -200,6 +267,35 @@ export default async function PostPage({
                   signedIn={!!viewer}
                 />
               </div>
+            )}
+            {!isDeleted && viewer && viewer.id === post.authorId && replies.length > 0 && (
+              <form
+                action={markSolved.bind(null, post.id) as unknown as string}
+                className="flex flex-wrap items-center gap-2 border-t border-line pt-3"
+              >
+                <label className="label" htmlFor="solved-reply">
+                  {post.isSolved ? "更換解方" : "標示解方"}
+                </label>
+                <select
+                  id="solved-reply"
+                  name="replyId"
+                  defaultValue={post.solvedReplyId ?? ""}
+                  className="select w-auto min-w-40"
+                >
+                  <option value="">— 選擇一則回覆 —</option>
+                  {replies.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      #{r.floor} {r.bodyMd.slice(0, 30)}
+                    </option>
+                  ))}
+                </select>
+                <ConfirmSubmitButton
+                  confirmMessage="確定將此回覆標示為解方嗎？"
+                  className="btn btn-primary btn-sm"
+                >
+                  標示為解方
+                </ConfirmSubmitButton>
+              </form>
             )}
 
             {!isDeleted && (
@@ -291,8 +387,19 @@ export default async function PostPage({
                 { isAnonymous: r.isAnonymous, author: r.author, authorId: r.authorId },
                 viewer
               );
+              const isSolvedReply = post.solvedReplyId != null && r.id === post.solvedReplyId;
+              const helpful = helpfulByReply.get(r.id);
               return (
-                <li key={r.id} id={`f${r.floor}`} className="card p-4 space-y-3 scroll-mt-20">
+                <li
+                  key={r.id}
+                  id={`f${r.floor}`}
+                  className="card p-4 space-y-3 scroll-mt-20"
+                  style={
+                    isSolvedReply
+                      ? { borderColor: "var(--success-border)", boxShadow: "0 0 0 1px var(--success-border)" }
+                      : undefined
+                  }
+                >
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                     <a
                       href={`#f${r.floor}`}
@@ -307,12 +414,14 @@ export default async function PostPage({
                       anonymous={anonymous}
                       at={r.createdAt}
                       relative
+                      extra={<ClinicianBadge status={r.author.clinicianStatus} />}
                     />
                     {r.replyToFloor != null && (
                       <a href={`#f${r.replyToFloor}`} className="badge hover:text-accent">
                         ↩ #{r.replyToFloor}
                       </a>
                     )}
+                    {isSolvedReply && <span className="badge badge-success">✓ 解方</span>}
                     {deleted && <span className="badge badge-danger">已刪</span>}
                   </div>
 
@@ -322,6 +431,12 @@ export default async function PostPage({
 
                   {!deleted && (
                     <div className="flex flex-wrap items-center gap-2">
+                      <HelpfulButton
+                        targetType="REPLY"
+                        targetId={r.id}
+                        initialCount={helpful?.count ?? 0}
+                        initialVoted={helpful?.voted ?? false}
+                      />
                       {viewer && (r.authorId === viewer.id || isAdmin) && (
                         <>
                           <details className="w-full">

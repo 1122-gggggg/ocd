@@ -209,3 +209,70 @@ export function clearRateLimitStore(): void {
 export function rateLimitStoreSize(): number {
   return store.size;
 }
+// ---------------------------------------------------------------------------
+// Distributed helper (Upstash REST with local fallback)
+// ---------------------------------------------------------------------------
+
+/**
+ * 分散式限流檢查：有 REDIS_URL 時經 Upstash REST pipeline (INCR + PEXPIRE)
+ * 做跨實例計數；無 REDIS_URL 或任何失敗時回退本地 checkRateLimit。
+ * 不新增依賴，僅用原生 fetch。呼叫端失敗一律視為開放或回退，
+ * 因此此函數正常情況下不 throw（僅極端情況才可能 throw，由呼叫端捕捉後開放）。
+ */
+export async function tryRedisCheck(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<boolean> {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) {
+    return checkRateLimit(key, limit, windowMs);
+  }
+  try {
+    const base = redisUrl.replace(/\/+$/, "");
+    const token =
+      process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.REDIS_TOKEN ?? "";
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    const windowMsInt = Math.max(1, Math.floor(windowMs));
+    // lib.dom 可能早於 AbortSignal.timeout，用命名常數承接並說明理由
+    const AbortSignalWithTimeout = AbortSignal as unknown as {
+      timeout?: (ms: number) => AbortSignal;
+    };
+    const signal =
+      typeof AbortSignalWithTimeout.timeout === "function"
+        ? AbortSignalWithTimeout.timeout(2000)
+        : undefined;
+    const res = await fetch(`${base}/pipeline`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify([
+        ["INCR", key],
+        ["PEXPIRE", key, String(windowMsInt)],
+      ]),
+      cache: "no-store",
+      ...(signal ? { signal } : {}),
+    });
+    if (!res.ok) {
+      return checkRateLimit(key, limit, windowMs);
+    }
+    const raw: unknown = await res.json();
+    let count = NaN;
+    if (Array.isArray(raw) && raw.length > 0) {
+      const first: unknown = raw[0];
+      if (first && typeof first === "object" && "result" in first) {
+        count = Number(first.result);
+      }
+    }
+    if (!Number.isFinite(count)) {
+      return checkRateLimit(key, limit, windowMs);
+    }
+    return count <= limit;
+  } catch {
+    return checkRateLimit(key, limit, windowMs);
+  }
+}

@@ -254,10 +254,24 @@ export function SiteHeader({
             自救專區
           </Link>
         </nav>
+        {/* Desktop search — GET to /search */}
+        <form action="/search" method="get" role="search" className="hidden md:flex items-center ml-1 shrink-0">
+          <input
+            name="q"
+            type="search"
+            placeholder="搜解方…（如：門鎖 ERP）"
+            aria-label="搜尋解方"
+            className="input py-1.5 text-sm w-44 lg:w-56"
+          />
+        </form>
         <div className="flex-1" />
 
         {/* Account area */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Mobile search — collapsed to icon linking to /search */}
+          <Link href="/search" aria-label="搜尋解方" className="btn btn-ghost btn-sm md:hidden">
+            🔍
+          </Link>
           {user ? (
             <div className="relative">
               <button

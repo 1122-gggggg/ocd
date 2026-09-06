@@ -144,6 +144,9 @@ export default async function RootLayout({
   return (
     <html lang="zh-Hant">
       <body className={`${notoSansTC.variable} antialiased min-h-screen flex flex-col`}>
+        <div className="sticky top-0 z-50 bg-red-50 text-xs text-center py-1 text-red-800">
+          需要立即協助？<a href="tel:1925" className="underline font-semibold">安心專線 1925（24h）</a>｜本站非醫療建議
+        </div>
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 btn btn-primary btn-sm"

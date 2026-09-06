@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { auth } from "@/auth";
+import { getVictories } from "@/app/actions/recovery";
 import { getCachedHomeBoards } from "@/lib/cache";
 import { formatRelative } from "@/lib/format";
-import { GROUP_LABELS, GROUP_ORDER } from "@/components/ui";
+import { EmptyState, GROUP_LABELS, GROUP_ORDER } from "@/components/ui";
 import { REDDIT_CASES } from "@/data/reddit-cases";
 
 const GROUP_BLURB: Record<string, string> = {
@@ -12,7 +13,7 @@ const GROUP_BLURB: Record<string, string> = {
 };
 
 export default async function HomePage() {
-  const [boards, session] = await Promise.all([getCachedHomeBoards(), auth()]);
+  const [boards, session, victories] = await Promise.all([getCachedHomeBoards(), auth(), getVictories(3)]);
   const signedIn = !!(session as { user?: unknown } | null)?.user;
   const totalPosts = boards.reduce((n, b) => n + b._count.posts, 0);
 
@@ -197,46 +198,34 @@ export default async function HomePage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-          <div className="card p-3 bg-surface border border-line space-y-1">
-            <div className="flex items-center justify-between text-muted">
-              <span className="font-medium text-fg">匿名病友</span>
-              <span>今天</span>
-            </div>
-            <p className="text-fg leading-relaxed">
-              「出門後腦袋瘋狂大叫門沒鎖，我深呼吸了 2 分鐘，握著拳頭走去搭捷運，<strong>沒有回頭看第 2 次</strong>！」
-            </p>
-            <span className="inline-block text-[0.7rem] text-accent bg-accent-soft px-1.5 py-0.5 rounded">
-              #檢查型強迫
-            </span>
+        {victories.length === 0 ? (
+          <EmptyState
+            title="成為第一個分享勝利的人"
+            description="尚無勝利分享，記錄你今天抵抗強迫的小勝利，鼓勵正在努力的病友。"
+            action={
+              <Link href="/recovery" className="btn btn-secondary btn-sm">
+                前往復原專區分享
+              </Link>
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            {victories.map((v) => (
+              <div
+                key={v.id}
+                className="card p-3 bg-surface border border-line space-y-1"
+              >
+                <div className="flex items-center justify-between text-muted">
+                  <span className="font-medium text-fg">{v.user.nickname}</span>
+                  <span>{formatRelative(v.createdAt)}</span>
+                </div>
+                <p className="text-fg leading-relaxed line-clamp-4">
+                  {v.content.length > 120 ? `${v.content.slice(0, 120)}……` : v.content}
+                </p>
+              </div>
+            ))}
           </div>
-
-          <div className="card p-3 bg-surface border border-line space-y-1">
-            <div className="flex items-center justify-between text-muted">
-              <span className="font-medium text-fg">小安</span>
-              <span>今天</span>
-            </div>
-            <p className="text-fg leading-relaxed">
-              「胸口微悶又想拿出 Apple Watch 查心跳，我把手錶放進抽屜，<strong>忍了 30 分鐘後焦慮自然退下去了</strong>。」
-            </p>
-            <span className="inline-block text-[0.7rem] text-accent bg-accent-soft px-1.5 py-0.5 rounded">
-              #健康焦慮
-            </span>
-          </div>
-
-          <div className="card p-3 bg-surface border border-line space-y-1">
-            <div className="flex items-center justify-between text-muted">
-              <span className="font-medium text-fg">阿偉</span>
-              <span>昨天</span>
-            </div>
-            <p className="text-fg leading-relaxed">
-              「大腦跳出可怕的傷害念頭，我沒有躲進房間，我對自己說『隨便啦』，<strong>繼續陪家人把這部電影看完</strong>。」
-            </p>
-            <span className="inline-block text-[0.7rem] text-accent bg-accent-soft px-1.5 py-0.5 rounded">
-              #傷害型強迫
-            </span>
-          </div>
-        </div>
+        )}
       </section>
 
       {/* 4. Priority: Learn — 學習資源與 Reddit 康復實錄 */}

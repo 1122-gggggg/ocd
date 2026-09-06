@@ -1,11 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import {
-  SupportPreferenceItem,
-  COMMON_TOPICS,
-  updateSupportPreference,
-} from "@/app/actions/preferences";
+import { SupportPreferenceItem, updateSupportPreference } from "@/app/actions/preferences";
+import { COMMON_TOPICS } from "@/lib/preference-topics";
 
 export function SupportPreferenceForm({
   initialPreference,

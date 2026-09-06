@@ -124,6 +124,8 @@ model User {
   victories            Victory[]
   supportReactions     SupportReaction[]
   supportPreference    SupportPreference?
+  notifications        Notification[]
+  helpfulVotes         HelpfulVote[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -223,11 +225,16 @@ model Post {
   title       String
   bodyMd      String    @db.Text
   isAnonymous Boolean   @default(false)
+  isSolved    Boolean   @default(false)
+  solvedReplyId String?
+  helpfulCount Int      @default(0)
+  searchTsv   Unsupported("tsvector")? @map("search_tsv")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
   deletedById String?
   replies     Reply[]
+  tags        PostTag[]
   supportMode PostSupportMode @default(EMPATHY)
 
   @@index([boardId, deletedAt, createdAt])
@@ -250,6 +257,7 @@ model Reply {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
   deletedById  String?
+  searchTsv   Unsupported("tsvector")? @map("search_tsv")
 
   @@unique([postId, floor])
   @@index([postId, createdAt])
@@ -385,4 +393,54 @@ model SupportPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  name      String
+  createdAt DateTime  @default(now())
+  posts     PostTag[]
+}
+
+model PostTag {
+  id     String @id @default(cuid())
+  postId String
+  tagId  String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, tagId])
+  @@index([postId])
+  @@index([tagId])
+}
+
+model HelpfulVote {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetType String
+  targetId   String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@index([userId])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipientId String?
+  postId      String?
+  replyId     String?
+  kind        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([recipientId, createdAt])
+  @@index([recipientId, readAt])
 }

@@ -57,15 +57,25 @@ export default function LearnIndexPage() {
         </h2>
         <ul className="grid gap-3 sm:grid-cols-2">
           {symptoms.map((entry) => (
-            <li key={entry.slug}>
+            <li
+              key={entry.slug}
+              className="card card-pad space-y-1.5 flex flex-col justify-between"
+            >
               <Link
                 href={`/learn/${entry.slug}`}
-                className="card card-pad card-link space-y-1.5"
+                className="space-y-1.5 group"
               >
-                <p className="font-medium text-fg">{entry.condition}</p>
+                <p className="font-medium text-fg group-hover:text-accent transition-colors">{entry.condition}</p>
                 <p className="text-sm text-muted leading-relaxed">
                   {excerpt(entry.overview)}
                 </p>
+              </Link>
+              <Link
+                href={`/b/${entry.boardSlug}`}
+                className="text-xs text-accent hover:underline pt-1.5 mt-1 border-t border-line/50 flex items-center justify-between"
+              >
+                <span>病友實戰</span>
+                <span aria-hidden="true">→</span>
               </Link>
             </li>
           ))}
@@ -81,15 +91,25 @@ export default function LearnIndexPage() {
         </h2>
         <ul className="grid gap-3 sm:grid-cols-2">
           {treatments.map((entry) => (
-            <li key={entry.slug}>
+            <li
+              key={entry.slug}
+              className="card card-pad space-y-1.5 flex flex-col justify-between"
+            >
               <Link
                 href={`/learn/${entry.slug}`}
-                className="card card-pad card-link space-y-1.5"
+                className="space-y-1.5 group"
               >
-                <p className="font-medium text-fg">{entry.condition}</p>
+                <p className="font-medium text-fg group-hover:text-accent transition-colors">{entry.condition}</p>
                 <p className="text-sm text-muted leading-relaxed">
                   {excerpt(entry.overview)}
                 </p>
+              </Link>
+              <Link
+                href={`/b/${entry.boardSlug}`}
+                className="text-xs text-accent hover:underline pt-1.5 mt-1 border-t border-line/50 flex items-center justify-between"
+              >
+                <span>病友實戰</span>
+                <span aria-hidden="true">→</span>
               </Link>
             </li>
           ))}

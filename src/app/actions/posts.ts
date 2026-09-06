@@ -27,7 +27,6 @@ export async function createPost(
   const bodyMd = String(formData.get("bodyMd") ?? "").trim();
   const isAnonymous =
     formData.get("isAnonymous") === "1" || formData.get("isAnonymous") === "on";
-  const confirmCrisis = String(formData.get("confirmCrisis") ?? "");
   const supportModeRaw = String(formData.get("supportMode") ?? "EMPATHY");
   const validModes = [
     "EMPATHY",
@@ -43,25 +42,6 @@ export async function createPost(
   if (!bodyMd || bodyMd.length > 20000) {
     return { ok: false, code: "INVALID_BODY", message: "正文 1-20000 字" };
   }
-  const pipelineResult = await runSupportPipeline({
-    sourceType: "POST",
-    userId: user.id,
-    text: `${title}\n\n${bodyMd}`,
-    context: {
-      boardSlug,
-      postSupportMode: supportMode,
-      isAnonymous,
-    },
-    logInteraction: false,
-  });
-
-  if (pipelineResult.safety.isCrisis && confirmCrisis !== "1") {
-    return {
-      ok: false,
-      code: "CRISIS_CONFIRM",
-      message: pipelineResult.safety.guidanceText || "請確認已閱讀求助資源",
-    };
-  }
   const board = await prisma.board.findUnique({ where: { slug: boardSlug }, select: { id: true, status: true, slug: true } });
   if (!board) return { ok: false, code: "BOARD_NOT_FOUND" };
   const can = canCreatePost(
@@ -69,6 +49,19 @@ export async function createPost(
     board as unknown as Parameters<typeof canCreatePost>[1]
   );
   if (!can) return { ok: false, code: "FORBIDDEN", message: "無權限發文" };
+  const rawTagSlugs = formData
+    .getAll("tags")
+    .map((v) => String(v).trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 3);
+  let tagIds: string[] = [];
+  if (rawTagSlugs.length > 0) {
+    const matched = await prisma.tag.findMany({
+      where: { slug: { in: rawTagSlugs } },
+      select: { id: true },
+    });
+    tagIds = matched.slice(0, 3).map((t) => t.id);
+  }
 
   const post = await prisma.post.create({
     data: {
@@ -80,6 +73,12 @@ export async function createPost(
       supportMode,
     },
   });
+  if (tagIds.length > 0) {
+    await prisma.postTag.createMany({
+      data: tagIds.map((tagId) => ({ postId: post.id, tagId })),
+      skipDuplicates: true,
+    });
+  }
 
   await runSupportPipeline({
     sourceType: "POST",
@@ -142,6 +141,7 @@ export async function createReply(
     select: {
       id: true,
       boardId: true,
+      authorId: true,
       title: true,
       supportMode: true,
       deletedAt: true,
@@ -179,6 +179,7 @@ export async function createReply(
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      let createdReplyId: string | null = null;
       await prisma.$transaction(
         async (tx) => {
           const max = await tx.reply.findFirst({
@@ -187,7 +188,7 @@ export async function createReply(
             select: { floor: true },
           });
           const nextFloor = (max?.floor ?? 0) + 1;
-          await tx.reply.create({
+          const reply = await tx.reply.create({
             data: {
               postId,
               authorId: user.id,
@@ -197,6 +198,7 @@ export async function createReply(
               replyToFloor: replyToFloor !== null && !isNaN(replyToFloor) ? replyToFloor : null,
             },
           });
+          createdReplyId = reply.id;
         },
         { isolationLevel: "Serializable" }
       );
@@ -214,8 +216,34 @@ export async function createReply(
         logInteraction: true,
       });
 
+      if (createdReplyId && post.authorId !== user.id) {
+        try {
+          await prisma.notification.create({
+            data: {
+              userId: post.authorId,
+              recipientId: post.authorId,
+              postId,
+              replyId: createdReplyId,
+              kind: "REPLY",
+            },
+          });
+        } catch (err) {
+          console.error("[createReply] Notification write failed:", err);
+        }
+      }
+
       revalidatePath(`/b/${post.board.slug}/p/${postId}`);
       revalidateTag("boards-home");
+      const hitReassurance = pipelineResult.reassurance?.isReassurance === true;
+      if (hitReassurance) {
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const recentCount = await prisma.supportInteraction.count({
+          where: { sourceId: postId, createdAt: { gte: since } },
+        });
+        if (recentCount >= 3) {
+          return { ok: false, code: "URGE_SURFING", message: "先做2分鐘衝動衝浪再回" };
+        }
+      }
       return {
         ok: true,
         message:
@@ -281,6 +309,50 @@ export async function deletePost(
   await prisma.post.update({
     where: { id: postId },
     data: { deletedAt: new Date(), deletedById: user.id },
+  });
+  await prisma.postTag.deleteMany({ where: { postId } });
+  revalidatePath(`/b/${post.board.slug}/p/${postId}`);
+  revalidatePath(`/b/${post.board.slug}`);
+  revalidateTag("boards-home");
+  return { ok: true };
+}
+
+export async function markSolved(
+  postId: string,
+  replyIdOrForm?: string | FormData | null
+): Promise<{ ok: boolean; code?: string; message?: string }> {
+  const session = (await auth()) as unknown as {
+    user?: { id: string; role: string };
+  } | null;
+  const user = session?.user;
+  if (!user?.id) return { ok: false, code: "UNAUTHORIZED", message: "請先登入" };
+  let replyId: string | null = null;
+  if (typeof replyIdOrForm === "string") {
+    replyId = replyIdOrForm.trim() || null;
+  } else if (replyIdOrForm instanceof FormData) {
+    const raw =
+      replyIdOrForm.get("replyId") ?? replyIdOrForm.get("solvedReplyId");
+    replyId = raw ? String(raw).trim() || null : null;
+  }
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { id: true, authorId: true, deletedAt: true, board: { select: { slug: true } } },
+  });
+  if (!post) return { ok: false, code: "NOT_FOUND" };
+  if (post.authorId !== user.id && user.role !== "ADMIN")
+    return { ok: false, code: "FORBIDDEN" };
+  if (post.deletedAt) return { ok: false, code: "DELETED" };
+  if (replyId) {
+    const reply = await prisma.reply.findUnique({
+      where: { id: replyId },
+      select: { id: true, postId: true, deletedAt: true },
+    });
+    if (!reply || reply.postId !== postId || reply.deletedAt)
+      return { ok: false, code: "INVALID_REPLY" };
+  }
+  await prisma.post.update({
+    where: { id: postId },
+    data: { isSolved: true, solvedReplyId: replyId },
   });
   revalidatePath(`/b/${post.board.slug}/p/${postId}`);
   revalidatePath(`/b/${post.board.slug}`);

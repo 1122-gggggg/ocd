@@ -3,12 +3,14 @@ export type RedditCasePost = {
   title: string;
   bodyMd: string;
   redditSource: string;
+  relatedBoardSlugs: string[];
 };
 
 export const REDDIT_CASES: RedditCasePost[] = [
   // 1. 污染與清洗 (Contamination & Washing)
   {
     boardSlug: "contamination",
+    relatedBoardSlugs: ["contamination", "erp", "self-help"],
     title: "【康復實錄】告別破皮流血的雙手：我如何用 ERP 階梯打破「汙染恐懼」與過度洗手循環",
     redditSource:
       "Reddit r/OCD & r/OCDRecovery (參考貼文：'After 3 months of extensive exposure and a change in mindset, my hands are healed' 與 Contamination ERP 實踐討論)",
@@ -45,6 +47,7 @@ export const REDDIT_CASES: RedditCasePost[] = [
   // 2. 確認與檢查 (Checking)
   {
     boardSlug: "checking",
+    relatedBoardSlugs: ["checking", "erp", "self-help"],
     title: "【康復實錄】走出反覆確認瓦斯與門鎖的惡夢：我如何靠「延遲與一次原則」重獲自由",
     redditSource:
       "Reddit r/OCD & r/OCDRecovery (參考貼文：'How I overcame my checking OCD (stoves, doors, appliances)' 及相關鎖門/瓦斯檢查 ERP 成功個案)",
@@ -76,6 +79,7 @@ export const REDDIT_CASES: RedditCasePost[] = [
   // 3. 傷害恐懼 (Harm OCD)
   {
     boardSlug: "harm",
+    relatedBoardSlugs: ["harm", "erp", "act"],
     title: "【康復經驗】從害怕拿刀到重獲平靜：我是如何透過 ERP 克服傷害型強迫症（Harm OCD）",
     redditSource:
       "Reddit r/OCD - 'I recovered from Harm OCD after 2 years of hell. Here is the ERP breakdown' (參考 r/OCD 與 r/OCDRecovery 康復案例)",
@@ -110,6 +114,7 @@ export const REDDIT_CASES: RedditCasePost[] = [
   // 4. 純強迫症與反芻 (Pure O & Rumination)
   {
     boardSlug: "pure-o",
+    relatedBoardSlugs: ["pure-o", "cbt", "act"],
     title: "【康復經驗】終結大腦無止境的「反芻分析」：運用 Michael Greenberg 博士 RF-ERP 擺脫純強迫（Pure O）精神內耗",
     redditSource:
       "Reddit r/OCDRecovery - 'How Dr. Michael Greenberg's RF-ERP changed my life with Pure O' (彙整自 r/OCDRecovery 及 Greenberg 臨床研究專題)",
@@ -143,6 +148,7 @@ export const REDDIT_CASES: RedditCasePost[] = [
   // 5. 關係強迫症 (ROCD)
   {
     boardSlug: "rocd",
+    relatedBoardSlugs: ["rocd", "cbt", "act"],
     title: "【康復案例】「我真的愛他嗎？」走出關係強迫症（ROCD）：停止情緒檢查與放棄追求100%確定性的康復歷程",
     redditSource:
       "Reddit r/ROCD - 《A masterpost of what I've learned after a 5-year battle with ROCD: How I recovered using ERP & ACT》",
@@ -171,6 +177,7 @@ export const REDDIT_CASES: RedditCasePost[] = [
   // 6. 道德宗教強迫 (Scrupulosity)
   {
     boardSlug: "scrupulosity",
+    relatedBoardSlugs: ["scrupulosity", "cbt", "act"],
     title: "【康復案例】「我是不是個虛偽敗壞的人？」道德強迫症（Moral OCD）患者的自救：停止記憶審查與擁抱道德模糊性",
     redditSource:
       "Reddit r/OCD & r/OCDRecovery - 《Recovered from severe Moral Scrupulosity: How stopping mental reviews and embracing moral ambiguity saved my life》",
@@ -198,6 +205,7 @@ export const REDDIT_CASES: RedditCasePost[] = [
   // 7. 健康焦慮 (Health Anxiety)
   {
     boardSlug: "health-anxiety",
+    relatedBoardSlugs: ["health-anxiety", "erp", "cbt"],
     title: "【康復分享】擺脫心跳過度監控與症狀Google：我是如何靠暴露不反應（ERP）走出健康焦慮強迫症",
     redditSource:
       "Reddit r/HealthAnxiety & r/OCDRecovery - 'How I overcame health anxiety and chronic symptom checking with ERP'",
@@ -225,6 +233,7 @@ export const REDDIT_CASES: RedditCasePost[] = [
   // 8. 對稱與排列 (Symmetry & Ordering)
   {
     boardSlug: "symmetry",
+    relatedBoardSlugs: ["symmetry", "erp", "mindfulness"],
     title: "【康復分享】打破「非恰好不可」的魔咒：對稱與排列強迫症（Just Right OCD）的 ERP 實踐指南",
     redditSource:
       "Reddit r/OCD & r/OCDRecovery - 'Overcoming Just Right and Symmetry OCD through ERP: Learning to live with the wrongness'",

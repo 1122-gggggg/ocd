@@ -13,17 +13,6 @@ export interface SupportPreferenceItem {
   showRecoveryPrompts: boolean;
 }
 
-export const COMMON_TOPICS = [
-  { id: "contamination", label: "清潔與污染 (Contamination)" },
-  { id: "harm", label: "傷害與失控疑慮 (Harm OCD)" },
-  { id: "rocd", label: "伴侶與關係強迫 (ROCD)" },
-  { id: "scrupulosity", label: "道德宗教與罪咎 (Scrupulosity)" },
-  { id: "false_memory", label: "假記憶與過去核對 (False Memory)" },
-  { id: "health", label: "健康與身體感官 (Health OCD)" },
-  { id: "sexual", label: "性侵入性念頭 (Sexual Intrusive)" },
-  { id: "existential", label: "存在與真實感 (Existential OCD)" },
-] as const;
-
 export async function getSupportPreference(
   userId?: string
 ): Promise<SupportPreferenceItem | null> {
@@ -52,6 +41,14 @@ export async function getSupportPreference(
     allowPeerMatching: pref.allowPeerMatching,
     showRecoveryPrompts: pref.showRecoveryPrompts,
   };
+}
+
+export async function getMyPreferenceSafe(): Promise<SupportPreferenceItem | null> {
+  try {
+    return await getSupportPreference();
+  } catch {
+    return null;
+  }
 }
 
 export async function updateSupportPreference(

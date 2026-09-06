@@ -44,3 +44,51 @@ export const getCachedHomeBoards = unstable_cache(
   ["boards-home"],
   { revalidate: 30, tags: ["boards-home"] }
 );
+
+export type BoardSort = "recent" | "helpful" | "solved";
+
+const BOARD_POSTS_TAKE = 20;
+
+const boardPostAuthorSelect = {
+  id: true,
+  nickname: true,
+  memberType: true,
+  clinicianStatus: true,
+} as const;
+
+export async function getBoardPosts(
+  boardId: string,
+  sort: BoardSort,
+  page: number
+) {
+  const safePage = Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1;
+  const orderBy =
+    sort === "helpful"
+      ? [{ helpfulCount: "desc" as const }, { createdAt: "desc" as const }]
+      : sort === "solved"
+        ? [
+            { isSolved: "desc" as const },
+            { helpfulCount: "desc" as const },
+            { createdAt: "desc" as const },
+          ]
+        : [{ createdAt: "desc" as const }];
+  return prisma.post.findMany({
+    where: { boardId, deletedAt: null },
+    orderBy,
+    skip: (safePage - 1) * BOARD_POSTS_TAKE,
+    take: BOARD_POSTS_TAKE,
+    select: {
+      id: true,
+      title: true,
+      bodyMd: true,
+      createdAt: true,
+      isAnonymous: true,
+      authorId: true,
+      isSolved: true,
+      helpfulCount: true,
+      author: { select: boardPostAuthorSelect },
+      tags: { select: { tag: { select: { slug: true, name: true } } } },
+      _count: { select: { replies: { where: { deletedAt: null } } } },
+    },
+  });
+}

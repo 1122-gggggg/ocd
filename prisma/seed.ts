@@ -15,7 +15,7 @@ type BoardSeed = {
   officialMd: string;
 };
 
-const boards: BoardSeed[] = [
+export const boards: BoardSeed[] = [
   // SYMPTOM
   {
     slug: "contamination",
@@ -234,6 +234,31 @@ async function main() {
       },
     });
   }
+  const tags = [
+    { slug: "erp", name: "ERP" },
+    { slug: "checking", name: "檢查" },
+    { slug: "cleaning", name: "清洗" },
+    { slug: "intrusive-thoughts", name: "侵入思維" },
+    { slug: "anxiety", name: "焦慮" },
+    { slug: "family", name: "家屬" },
+  ];
+  for (const t of tags) {
+    await prisma.tag.upsert({
+      where: { slug: t.slug },
+      update: { name: t.name },
+      create: { slug: t.slug, name: t.name },
+    });
+  }
+  const boardTagMap: Record<string, string> = {
+    contamination: "cleaning",
+    checking: "checking",
+    harm: "intrusive-thoughts",
+    "pure-o": "intrusive-thoughts",
+    rocd: "anxiety",
+    scrupulosity: "anxiety",
+    "health-anxiety": "anxiety",
+    symmetry: "erp",
+  };
 
   const announcements = await prisma.board.findUnique({ where: { slug: "announcements" } });
   if (announcements) {
@@ -259,16 +284,29 @@ async function main() {
       const existing = await prisma.post.findFirst({
         where: { boardId: targetBoard.id, title: c.title },
       });
-      if (!existing) {
-        await prisma.post.create({
-          data: {
-            boardId: targetBoard.id,
-            authorId: admin.id,
-            title: c.title,
-            bodyMd: `${c.bodyMd}\n\n---\n**原案討論來源**：${c.redditSource}`,
-            isAnonymous: false,
-          },
-        });
+      const postId =
+        existing?.id ??
+        (
+          await prisma.post.create({
+            data: {
+              boardId: targetBoard.id,
+              authorId: admin.id,
+              title: c.title,
+              bodyMd: `${c.bodyMd}\n\n---\n**原案討論來源**：${c.redditSource}`,
+              isAnonymous: false,
+            },
+          })
+        ).id;
+      if (c.boardSlug) {
+        const tagSlug = boardTagMap[c.boardSlug] ?? "erp";
+        const tag = await prisma.tag.findUnique({ where: { slug: tagSlug } });
+        if (tag) {
+          await prisma.postTag.upsert({
+            where: { postId_tagId: { postId, tagId: tag.id } },
+            update: {},
+            create: { postId, tagId: tag.id },
+          });
+        }
       }
     }
   }
