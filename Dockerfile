@@ -1,7 +1,7 @@
 # Production image: multi-stage (deps -> build -> standalone runner).
 # Never `npm run dev` in prod — the runner executes the prebuilt Next.js
 # standalone server (`node server.js`).
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 WORKDIR /app
 
 FROM base AS deps
