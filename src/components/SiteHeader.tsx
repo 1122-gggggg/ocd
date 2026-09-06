@@ -230,6 +230,14 @@ export function SiteHeader({
             💬 互助陪伴大廳
           </Link>
           <Link
+            href="/recovery"
+            className={`btn btn-ghost btn-sm ${
+              pathname?.startsWith("/recovery") ? "text-accent font-medium bg-accent-soft" : ""
+            }`}
+          >
+            🌱 復原歷程
+          </Link>
+          <Link
             href="/learn"
             className={`btn btn-ghost btn-sm ${
               pathname?.startsWith("/learn") ? "text-accent font-medium bg-accent-soft" : ""
@@ -378,6 +386,9 @@ export function SiteHeader({
               <div className="border-t border-line pt-3 flex flex-wrap gap-2">
                 <Link href="/chat" className="btn btn-primary btn-sm">
                   💬 互助陪伴大廳
+                </Link>
+                <Link href="/recovery" className="btn btn-secondary btn-sm">
+                  🌱 復原歷程
                 </Link>
                 <Link href="/learn" className="btn btn-secondary btn-sm">
                   學習資源區

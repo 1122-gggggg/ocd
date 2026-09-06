@@ -42,6 +42,7 @@ export function PostForm({
   const [body, setBody] = useState("");
   const [title, setTitle] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [supportMode, setSupportMode] = useState<string>("EMPATHY");
   const [checked, setChecked] = useState(false);
   const [preview, setPreview] = useState(false);
   const [pending, setPending] = useState(false);
@@ -123,6 +124,40 @@ export function PostForm({
     <>
       <form ref={formRef} id="post-form" onSubmit={handleSubmit} className="space-y-4">
         {!isReply && (
+          <>
+          <div className="space-y-1.5">
+            <label className="label">
+              你現在想做什麼？（選擇支持模式）
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { id: "EMPATHY", label: "💬 我只想被理解", desc: "純抒發心情，不需解答" },
+                { id: "SHARE_EXPERIENCE", label: "📖 我想分享經歷", desc: "日常體驗或復原微小步" },
+                { id: "FACING_OCD", label: "🛡️ 我正在面對強迫", desc: "當下焦慮，尋求陪伴抗壓" },
+                { id: "LOOKING_FOR_EXPERIENCE", label: "🔍 我想尋找經驗", desc: "想看其他人如何走出" },
+              ].map((m) => (
+                <label
+                  key={m.id}
+                  className={`cursor-pointer rounded-xl border p-2.5 flex flex-col justify-between transition-colors ${
+                    supportMode === m.id
+                      ? "bg-accent-soft border-accent text-accent font-medium"
+                      : "bg-surface border-line text-fg hover:border-accent/40"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="supportMode"
+                    value={m.id}
+                    checked={supportMode === m.id}
+                    onChange={(e) => setSupportMode(e.target.value)}
+                    className="sr-only"
+                  />
+                  <span className="text-xs font-semibold">{m.label}</span>
+                  <span className="text-[0.7rem] text-muted mt-1">{m.desc}</span>
+                </label>
+              ))}
+            </div>
+          </div>
           <div>
             <div className="flex items-baseline justify-between">
               <label className="label" htmlFor="pf-title">
@@ -143,7 +178,8 @@ export function PostForm({
               placeholder="一句話說明你想聊什麼"
             />
           </div>
-        )}
+        </>
+      )}
 
         <div>
           <div className="flex items-baseline justify-between gap-2">

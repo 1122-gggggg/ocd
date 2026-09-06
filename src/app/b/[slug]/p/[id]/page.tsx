@@ -9,6 +9,8 @@ import { PostForm } from "@/components/PostForm";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { ReportBox } from "@/components/ReportBox";
 import { AuthorMeta, Pagination } from "@/components/ui";
+import { SupportReactions } from "@/components/SupportReactions";
+import { getTargetReactions } from "@/app/actions/reactions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -38,6 +40,7 @@ const getPost = cache(async (id: string) =>
       id: true,
       boardId: true,
       authorId: true,
+      supportMode: true,
       title: true,
       bodyMd: true,
       isAnonymous: true,
@@ -124,6 +127,7 @@ export default async function PostPage({
   const isDeleted = !!post.deletedAt;
   const canDoReply = canReply(viewer, { status: board.status, slug: board.slug }, { deletedAt: post.deletedAt });
 
+  const postReactions = await getTargetReactions("POST", post.id, viewer?.id);
   const postAuthor = publicAuthorLabel(
     { isAnonymous: post.isAnonymous, author: post.author, authorId: post.authorId },
     viewer
@@ -169,12 +173,30 @@ export default async function PostPage({
 
             <div className="prose border-t border-line pt-4">
               <Markdown>{post.bodyMd}</Markdown>
+                {post.supportMode && (
+                  <span className="badge badge-accent text-xs">
+                    {post.supportMode === "EMPATHY" && "💬 我只想被理解"}
+                    {post.supportMode === "SHARE_EXPERIENCE" && "📖 分享經歷"}
+                    {post.supportMode === "FACING_OCD" && "🛡️ 面對強迫中"}
+                    {post.supportMode === "LOOKING_FOR_EXPERIENCE" && "🔍 尋找經驗"}
+                  </span>
+                )}
             </div>
 
             {isDeleted && isAdmin && (
               <p className="alert alert-error">
                 管理員可見：此文已被刪除，原文保留但對外隱藏。
               </p>
+            )}
+            {!isDeleted && (
+              <div className="pt-2">
+                <SupportReactions
+                  targetType="POST"
+                  targetId={post.id}
+                  initialCounts={postReactions}
+                  signedIn={!!viewer}
+                />
+              </div>
             )}
 
             {!isDeleted && (
@@ -363,6 +385,10 @@ export default async function PostPage({
           <p className="alert">無法回覆：文章已刪除或版區已關閉。</p>
         ) : (
           <>
+            <div className="p-2.5 rounded-lg bg-surface-2 border border-line text-xs text-muted leading-relaxed">
+              💡 <strong>陪伴守則（支持 ≠ 保證）</strong>：發文者正在面對真實的脆弱。請避免直接回答「放心啦絕對沒事」等短暫保證（那可能強化強迫循環），
+              建議使用<strong>「我懂這種痛苦」</strong>、<strong>「陪你一起撐過焦慮」</strong>來給予對方最堅實的同理同行。
+            </div>
             <PostForm
               postId={id}
               action={boundReply as unknown as (formData: FormData) => Promise<void>}

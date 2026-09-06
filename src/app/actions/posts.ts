@@ -27,6 +27,14 @@ export async function createPost(
   const isAnonymous =
     formData.get("isAnonymous") === "1" || formData.get("isAnonymous") === "on";
   const confirmCrisis = String(formData.get("confirmCrisis") ?? "");
+  const supportModeRaw = String(formData.get("supportMode") ?? "EMPATHY");
+  const validModes = [
+    "EMPATHY",
+    "SHARE_EXPERIENCE",
+    "FACING_OCD",
+    "LOOKING_FOR_EXPERIENCE",
+  ] as const;
+  const supportMode = validModes.find((m) => m === supportModeRaw) ?? "EMPATHY";
 
   if (!title || title.length > 80) {
     return { ok: false, code: "INVALID_TITLE", message: "標題 1-80 字" };
@@ -52,6 +60,7 @@ export async function createPost(
       title,
       bodyMd,
       isAnonymous,
+      supportMode,
     },
   });
   revalidatePath(`/b/${boardSlug}`);

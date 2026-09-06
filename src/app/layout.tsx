@@ -5,6 +5,7 @@ import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { getCachedBoards } from "@/lib/cache";
 import { SiteHeader } from "@/components/SiteHeader";
+import { AIAssistantWidget } from "@/components/AIAssistantWidget";
 
 const notoSansTC = Noto_Sans_TC({
   subsets: ["latin"],
@@ -153,6 +154,7 @@ export default async function RootLayout({
         <main id="main" className="flex-1">
           <div className="container-page py-6 sm:py-8">{children}</div>
         </main>
+        <AIAssistantWidget />
         <Footer />
       </body>
     </html>

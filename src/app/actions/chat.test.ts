@@ -1,4 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const { mockAuth, mockPrisma } = vi.hoisted(() => ({
+  mockAuth: vi.fn(),
+  mockPrisma: {
+    chatMessage: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("@/auth", () => ({
+  auth: (...args: unknown[]) => mockAuth(...args),
+}));
+
+vi.mock("@/lib/db", () => ({
+  prisma: mockPrisma,
+}));
+
 import { sendChatMessage, getChatMessages } from "./chat";
 
 interface MockSession {
@@ -14,7 +33,7 @@ interface MockChatMessageRecord {
   channel: string;
   content: string;
   createdAt: Date;
-  senderId?: string;
+  senderId: string;
   sender: {
     id: string;
     nickname: string;
@@ -24,47 +43,29 @@ interface MockChatMessageRecord {
   };
 }
 
-vi.mock("@/auth", () => ({
-  auth: vi.fn(),
-}));
-
-vi.mock("@/lib/db", () => ({
-  prisma: {
-    chatMessage: {
-      create: vi.fn(),
-      findMany: vi.fn(),
-    },
-  },
-}));
-
-import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
-
 describe("sendChatMessage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("fails if user is not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as unknown as MockSession);
+    mockAuth.mockResolvedValue(null);
     const res = await sendChatMessage("general", "Hello world");
     expect(res.ok).toBe(false);
     expect(res.code).toBe("UNAUTHORIZED");
   });
 
   it("fails if content is empty", async () => {
-    vi.mocked(auth).mockResolvedValue({
-      user: { id: "u1", role: "USER" },
-    } as unknown as MockSession);
+    const session: MockSession = { user: { id: "u1", role: "USER" } };
+    mockAuth.mockResolvedValue(session);
     const res = await sendChatMessage("general", "   ");
     expect(res.ok).toBe(false);
     expect(res.code).toBe("EMPTY_CONTENT");
   });
 
   it("fails if content exceeds 1000 characters", async () => {
-    vi.mocked(auth).mockResolvedValue({
-      user: { id: "u1", role: "USER" },
-    } as unknown as MockSession);
+    const session: MockSession = { user: { id: "u1", role: "USER" } };
+    mockAuth.mockResolvedValue(session);
     const longMsg = "a".repeat(1001);
     const res = await sendChatMessage("general", longMsg);
     expect(res.ok).toBe(false);
@@ -72,9 +73,8 @@ describe("sendChatMessage", () => {
   });
 
   it("successfully creates message and flags crisis keyword", async () => {
-    vi.mocked(auth).mockResolvedValue({
-      user: { id: "u1", role: "USER" },
-    } as unknown as MockSession);
+    const session: MockSession = { user: { id: "u1", role: "USER" } };
+    mockAuth.mockResolvedValue(session);
 
     const fakeCreated: MockChatMessageRecord = {
       id: "m1",
@@ -91,9 +91,7 @@ describe("sendChatMessage", () => {
       },
     };
 
-    vi.mocked(prisma.chatMessage.create).mockResolvedValue(
-      fakeCreated as unknown as MockChatMessageRecord
-    );
+    mockPrisma.chatMessage.create.mockResolvedValue(fakeCreated);
 
     const res = await sendChatMessage("general", "我不想活了，好痛苦");
     expect(res.ok).toBe(true);
@@ -103,9 +101,8 @@ describe("sendChatMessage", () => {
   });
 
   it("successfully creates normal message without crisis flag", async () => {
-    vi.mocked(auth).mockResolvedValue({
-      user: { id: "u2", role: "USER" },
-    } as unknown as MockSession);
+    const session: MockSession = { user: { id: "u2", role: "USER" } };
+    mockAuth.mockResolvedValue(session);
 
     const fakeCreated: MockChatMessageRecord = {
       id: "m2",
@@ -122,9 +119,7 @@ describe("sendChatMessage", () => {
       },
     };
 
-    vi.mocked(prisma.chatMessage.create).mockResolvedValue(
-      fakeCreated as unknown as MockChatMessageRecord
-    );
+    mockPrisma.chatMessage.create.mockResolvedValue(fakeCreated);
 
     const res = await sendChatMessage("general", "我懂這種感覺，陪你一起撐過去！");
     expect(res.ok).toBe(true);
@@ -145,6 +140,7 @@ describe("getChatMessages", () => {
         channel: "general",
         content: "第二篇",
         createdAt: new Date("2026-09-06T10:02:00Z"),
+        senderId: "u2",
         sender: {
           id: "u2",
           nickname: "User2",
@@ -158,6 +154,7 @@ describe("getChatMessages", () => {
         channel: "general",
         content: "第一篇",
         createdAt: new Date("2026-09-06T10:01:00Z"),
+        senderId: "u1",
         sender: {
           id: "u1",
           nickname: "User1",
@@ -168,13 +165,11 @@ describe("getChatMessages", () => {
       },
     ];
 
-    vi.mocked(prisma.chatMessage.findMany).mockResolvedValue(
-      fakeList as unknown as MockChatMessageRecord[]
-    );
+    mockPrisma.chatMessage.findMany.mockResolvedValue(fakeList);
 
     const messages = await getChatMessages("general", 10);
     expect(messages.length).toBe(2);
-    expect(messages[0].id).toBe("m1");
-    expect(messages[1].id).toBe("m2");
+    expect(messages[0]?.id).toBe("m1");
+    expect(messages[1]?.id).toBe("m2");
   });
 });
